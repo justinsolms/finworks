@@ -11,15 +11,16 @@ distributed without the express permission of Justin Solms.
 
 """
 import asyncio
+import datetime
 import aiohttp
 import unittest
 import aiounittest
 import pandas as pd
 
 # Classes to be tested
-from fundmanage3.finworks import APISession
+from fundmanage3.finworks import APISession, Data
 from fundmanage3.finworks import APIPaths
-from fundmanage3.finworks import Cache  # TODO: Write tests
+from fundmanage3.finworks import Cache
 
 # import warnings
 # warnings.filterwarnings(
@@ -173,6 +174,36 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         models, instruments = asyncio.run(get_results())
 
     # TODO: Write the rest of the `get` method tests
+
+
+class TestCache(unittest.TestCase):
+    """Get, integrate and cache data in a standard column format."""
+
+    @classmethod
+    def setUpClass(cls):
+        """ Set up class test fixtures. """
+        cls.cache = Cache()
+        cls.from_date = datetime.date(2021, 8, 7)
+        cls.to_date = datetime.date(2021, 8, 10)
+
+    def setUp(self):
+        """ Set up one test. """
+        pass
+
+    def test_cache_api_equality(self):
+        """Get cache data and verify against the API data.
+
+        This only works if the cache has the data in the test date range.
+        """
+        cache_data = self.cache.get_data(self.from_date, self.to_date)
+        api_data = self.cache._get_api_data(self.from_date, self.to_date)
+        # Do not test basics data equality as this can change at any moment.
+        pass
+        # Test time series equality
+        pd.testing.assert_frame_equal(
+            cache_data.positions, api_data.positions)
+        pd.testing.assert_frame_equal(
+            cache_data.transactions, api_data.transactions)
 
 
 class Suite(object):
