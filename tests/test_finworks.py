@@ -18,7 +18,7 @@ import aiounittest
 import pandas as pd
 
 # Classes to be tested
-from fundmanage3.finworks import APISession, Data
+from fundmanage3.finworks import APISession
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
 
@@ -195,8 +195,8 @@ class TestCache(unittest.TestCase):
 
         This only works if the cache has the data in the test date range.
         """
-        cache_data = self.cache.get_data(self.from_date, self.to_date)
-        api_data = self.cache._get_api_data(self.from_date, self.to_date)
+        cache_data = self.cache.get_cache_data(self.from_date, self.to_date)
+        api_data = self.cache.get_api_data(self.from_date, self.to_date)
         # Do not test basics data equality as this can change at any moment.
         pass
         # Test time series equality
