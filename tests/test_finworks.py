@@ -154,7 +154,7 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         """
         index_names = ['model_ticker', 'model_portfolio_id', 'name']
         async with APIPaths() as api:
-            response = await api.get_model_portfolios()
+            response = await api.get_models()
             self.assertIsInstance(response, pd.DataFrame)
             self.assertEqual(index_names, response.columns.to_list()[0:3])
 
@@ -165,7 +165,7 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         async def get_results():
             async with APIPaths() as api:
                 tasks_list = list()
-                tasks_list.append(api.get_model_portfolios())
+                tasks_list.append(api.get_models())
                 tasks_list.append(api.get_instruments())
                 results = await asyncio.gather(*tasks_list)
             return results
