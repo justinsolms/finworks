@@ -18,7 +18,7 @@ import aiounittest
 import pandas as pd
 
 # Classes to be tested
-from fundmanage3.finworks import APISession
+from fundmanage3.finworks import APISessionManager
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
 
@@ -82,7 +82,7 @@ class TestAPI(aiounittest.AsyncTestCase):
     @classmethod
     def setUpClass(cls):
         """ Set up class test fixtures. """
-        hostname = APISession._DOMAIN
+        hostname = APISessionManager._DOMAIN
         path = APIPaths._models_path  # Use as a test path
         cls.path = path
         cls.url = f'https://{hostname}{path}'
@@ -102,12 +102,12 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test___init__(self):
         """ Test Initialization. """
-        async with APISession() as api:
+        async with APISessionManager() as api:
             self.assertIsInstance(api.session, aiohttp.client.ClientSession)
 
     async def test__get_response(self):
         """ Get some data over the API. """
-        async with APISession() as api:
+        async with APISessionManager() as api:
             response = await api.get_response(self.url, {})
             # Unpack the response form the response_url.
             response, _ = response
@@ -116,7 +116,7 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test__get_retries(self):
         """Get with the possibility of retries to the API."""
-        async with APISession() as api:
+        async with APISessionManager() as api:
             response = await api.get_retries(self.path)
             self.assertIsInstance(response, list)
             self.assertIsInstance(response[0], dict)
