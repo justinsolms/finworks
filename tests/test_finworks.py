@@ -28,23 +28,23 @@ from fundmanage3.finworks import Cache
 
 
 class TestSSLCertificates(aiounittest.AsyncTestCase):
-    """Class test template. """
+    """Class test template."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         # Use the _APIPaths class to set up fixtures and verify certificates
         api = APIPaths()
         # URL
         hostname = APIPaths._DOMAIN
         path = APIPaths._models_path
-        cls.url = f'https://{hostname}{path}'
+        cls.url = f"https://{hostname}{path}"
         # SSL COntext
         cls.ssl_context = api._ssl_context
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
@@ -57,13 +57,14 @@ class TestSSLCertificates(aiounittest.AsyncTestCase):
 
     def test_ssl(self):
         """Finworks SSL certificate validity testing"""
+
         async def task(session):
             async with session.get(self.url, ssl=self.ssl_context) as response:
                 assert response.status == 200
                 return await response.json()
 
         async def get_response():
-            """ Get function """
+            """Get function"""
             tasks_list = list()
             async with aiohttp.ClientSession() as session:
                 tasks_list.append(task(session))
@@ -73,27 +74,27 @@ class TestSSLCertificates(aiounittest.AsyncTestCase):
         response = asyncio.run(get_response())
 
         # Test response
-        self.assertEqual([*response[0]], ['size', 'data'])
+        self.assertEqual([*response[0]], ["size", "data"])
 
 
 class TestAPI(aiounittest.AsyncTestCase):
-    """ Direct API query, response and result checking. """
+    """Direct API query, response and result checking."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         hostname = APISessionManager._DOMAIN
         path = APIPaths._models_path  # Use as a test path
         cls.path = path
-        cls.url = f'https://{hostname}{path}'
+        cls.url = f"https://{hostname}{path}"
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def tearDown(self):
@@ -101,12 +102,12 @@ class TestAPI(aiounittest.AsyncTestCase):
         pass
 
     async def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         async with APISessionManager() as api:
             self.assertIsInstance(api.session, aiohttp.client.ClientSession)
 
     async def test__get_response(self):
-        """ Get some data over the API. """
+        """Get some data over the API."""
         async with APISessionManager() as api:
             response = await api.get_response(self.url, {})
             # Unpack the response form the response_url.
@@ -127,16 +128,16 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         pass
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def tearDown(self):
@@ -144,15 +145,14 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         pass
 
     async def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         # Is this a subclass of _API?
         async with APIPaths() as api:
             self.assertIsInstance(api, APIPaths)
 
     async def test_get_model_portfolios(self):
-        """ List the available models on the system linked to the Model Manager.
-        """
-        index_names = ['model_ticker', 'model_portfolio_id', 'name']
+        """List the available models on the system linked to the Model Manager."""
+        index_names = ["model_ticker", "model_portfolio_id", "name"]
         async with APIPaths() as api:
             response = await api.get_models()
             self.assertIsInstance(response, pd.DataFrame)
@@ -181,13 +181,13 @@ class TestCache(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         cls.cache = Cache()
         cls.from_date = datetime.date(2021, 8, 7)
         cls.to_date = datetime.date(2021, 8, 10)
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def test_cache_api_equality(self):
@@ -200,10 +200,8 @@ class TestCache(unittest.TestCase):
         # Do not test basics data equality as this can change at any moment.
         pass
         # Test time series equality
-        pd.testing.assert_frame_equal(
-            cache_data.positions, api_data.positions)
-        pd.testing.assert_frame_equal(
-            cache_data.transactions, api_data.transactions)
+        pd.testing.assert_frame_equal(cache_data.positions, api_data.positions)
+        pd.testing.assert_frame_equal(cache_data.transactions, api_data.transactions)
 
 
 class Suite(object):
@@ -233,7 +231,6 @@ class Suite(object):
         runner.run(self.suite)
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     suite = Suite()
     suite.run()
