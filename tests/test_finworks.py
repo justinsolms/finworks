@@ -12,23 +12,49 @@ distributed without the express permission of Justin Solms.
 """
 import asyncio
 import datetime
+import json
+import logging
 import aiohttp
 import unittest
 import aiounittest
 import pandas as pd
 
+from unittest.mock import patch, AsyncMock
+
 # Classes to be tested
-from fundmanage3.finworks import APISessionManager
+from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
+
+# Get module-named logger.
+logger = logging.getLogger(__name__)
 
 # import warnings
 # warnings.filterwarnings(
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
 
+TEST_DATE = datetime.date(2023, 12, 20)
+
+def sync_runner(async_function):
+    """A little cheat to run coroutines synchronously."""
+    # Create a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Run the async function and wait for it to complete
+    loop.run_until_complete(async_function())
+
+    # Close the loop
+    loop.close()
+
 class TestSSLCertificates(aiounittest.AsyncTestCase):
-    """Class test template."""
+    """Test suite for the SSL certificates.
+
+    Does not use any of the finworks classes, except to get a test domain and
+    path. Instead directly uses the aiohttp package to test the SSL
+    certificates for the finworks API.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -36,8 +62,8 @@ class TestSSLCertificates(aiounittest.AsyncTestCase):
         # Use the _APIPaths class to set up fixtures and verify certificates
         api = APIPaths()
         # URL
-        hostname = APIPaths._DOMAIN
-        path = APIPaths._models_path
+        hostname = APIPaths.DOMAIN
+        path = APIPaths.MODELS_PATH  # Need only one path for testing
         cls.url = f"https://{hostname}{path}"
         # SSL COntext
         cls.ssl_context = api._ssl_context
@@ -77,72 +103,198 @@ class TestSSLCertificates(aiounittest.AsyncTestCase):
         self.assertEqual([*response[0]], ["size", "data"])
 
 
-class TestAPI(aiounittest.AsyncTestCase):
-    """Direct API query, response and result checking."""
+class TestAPISessionManager(aiounittest.AsyncTestCase):
+    """Test suite for the APISessionManager class."""
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
-        hostname = APISessionManager._DOMAIN
-        path = APIPaths._models_path  # Use as a test path
-        cls.path = path
-        cls.url = f"https://{hostname}{path}"
+        cls.test_path = "/api/modelmanager/model-portfolios"
+        cls.url = f"https://{APISessionManager.DOMAIN}{cls.test_path}"
+        cls.params = {}
+        # Read JSON response fixture as test data
+        with open("tests/fixtures/models.json") as f:
+            cls.json_response_fixture = json.load(f)
+        # New API instance
+        cls.api = APISessionManager()
 
     @classmethod
     def tearDownClass(cls):
         """Tear down class test fixtures."""
-        pass
+        del cls.api
 
     def setUp(self):
-        """Set up one test."""
-        pass
+        """Set up test case fixtures."""
+        sync_runner(self.api.make_session)
 
     def tearDown(self):
-        """tear down test case fixtures."""
-        pass
+        """Tear down test case fixtures."""
+        sync_runner(self.api.close_session)
 
-    async def test___init__(self):
-        """Test Initialization."""
-        async with APISessionManager() as api:
-            self.assertIsInstance(api.session, aiohttp.client.ClientSession)
+    async def test___aenter__(self):
+        """Test __aenter__ method."""
+        async with self.api as api:
+            self.assertIsInstance(api.session, aiohttp.ClientSession)
+            self.assertIsInstance(api.conn, aiohttp.TCPConnector)
 
-    async def test__get_response(self):
-        """Get some data over the API."""
+    async def test___aexit__(self):
+        """Test __aexit__ method."""
+        async with self.api as api:
+            pass
+        self.assertTrue(api.session.closed)
+        self.assertTrue(api.conn.closed)
+
+    async def test_get_response_actual(self):
+        """Test get_response method with the actual API response."""
+        # Use a test URL and params
+        test_url = f"https://{APISessionManager.DOMAIN}{self.test_path}"
+        test_params = self.params
+
         async with APISessionManager() as api:
-            response = await api.get_response(self.url, {})
-            # Unpack the response form the response_url.
-            response, _ = response
+            response = await api.get_response(test_url, test_params)
             self.assertIsInstance(response, list)
-            self.assertIsInstance(response[0], dict)
+            self.assertTrue(len(response) > 0)
+            self.assertTrue(all(isinstance(item, dict) for item in response))
+            # NOTE: The line below can only be used if the fixture is up to date
+            # with the latest API models data. These models change regularly.
+            # Use the fundmanage3.finworks.CollectJSONResponse class to update
+            # the fixture files.
+            self.assertEqual(response, self.json_response_fixture)
 
-    async def test__get_retries(self):
-        """Get with the possibility of retries to the API."""
-        async with APISessionManager() as api:
-            response = await api.get_retries(self.path)
+    async def test_get_response_mock(self):
+        """Test get_response method with a mock API response."""
+        # Use a test URL and params
+        test_url = f"https://{APISessionManager.DOMAIN}{self.test_path}"
+        test_params = self.params
+
+        # Mock the response of the get request
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value=self.json_response_fixture)
+
+        # Mock the session manager
+        @patch("fundmanage3.finworks.APISessionManager", autospec=APISessionManager)
+        async with mock_session_manager as api:
+            import ipdb; ipdb.set_trace()
+            response = await api.get_response(test_url, test_params)
             self.assertIsInstance(response, list)
-            self.assertIsInstance(response[0], dict)
+            self.assertTrue(len(response) > 0)
+            self.assertTrue(all(isinstance(item, dict) for item in response))
+            # NOTE: The line below can only be used if the fixture is up to date
+            # with the latest API models data. These models change regularly.
+            # Use the fundmanage3.finworks.CollectJSONResponse class to update
+            # the fixture files.
+            self.assertEqual(response, self.json_response_fixture)
+
+
+
+
+    @patch("aiohttp.ClientSession.get", new_callable=AsyncMock)
+    async def test_get_retries(self, mock_get):
+        """Test get_retries using a mock ``ClientSession.get`` response."""
+        # Use a test path
+        test_path = self.test_path
+
+        # Setup the mock to return a specific response
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = AsyncMock(
+            return_value=self.json_response_fixture
+        )
+
+        async with self.api as api:
+            response = await api.get_retries(test_path)
+            self.assertIsInstance(response, list)
+            self.assertTrue(len(response) > 0)
+            self.assertTrue(all(isinstance(item, dict) for item in response))
 
 
 class TestAPIPaths(aiounittest.AsyncTestCase):
-    """ """
+    """Test suite for the APIPaths class.
+
+    The test date is 2023-12-20.
+    """
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
-        pass
+        # Date on which there were transactions
+        cls.test_date = TEST_DATE
+        # Result column names for get methods
+        cls.model_column_names = [
+            "model_ticker",
+            "name",
+            "model_portfolio_id",
+            "instrument_id",
+            "value",
+        ]
+        cls.instrument_column_names = [
+            "status",
+            "ticker",
+            "instrument_id",
+            "currency",
+            "isin",
+        ]
+        cls.investor_column_names = [
+            "investor_id",
+            "id_doc_number",
+            "uuid",
+            "model_portfolio_id",
+            "take_on_date",
+            "status",
+            "active",
+            "name",
+        ]
+        cls.position_column_names = [
+            "date",
+            "price_date",
+            "investor_id",
+            "instrument_id",
+            "type",
+            "currency",
+            "price",
+            "units",
+            "value",
+        ]
+        cls.transaction_column_names = [
+            "date",
+            "processed_date",
+            "is_cashflow",
+            "type",
+            "sub_type",
+            "investor_id",
+            "transaction_id",
+            "instrument_id",
+            "currency",
+            "price",
+            "units",
+            "value",
+            "description",
+        ]
 
-    @classmethod
-    def tearDownClass(cls):
-        """Tear down class test fixtures."""
-        pass
+    def assert_models(self, response):
+        self.assertIsInstance(response, pd.DataFrame)
+        self.assertTrue(len(response) > 0)
+        self.assertEqual(set(self.model_column_names), set(response.columns))
 
-    def setUp(self):
-        """Set up one test."""
-        pass
+    def assert_instruments(self, response):
+        self.assertIsInstance(response, pd.DataFrame)
+        self.assertTrue(len(response) > 0)
+        self.assertEqual(set(self.instrument_column_names), set(response.columns))
 
-    def tearDown(self):
-        """tear down test case fixtures."""
-        pass
+    def assert_investors(self, response):
+        self.assertIsInstance(response, pd.DataFrame)
+        self.assertTrue(len(response) > 0)
+        self.assertEqual(set(self.investor_column_names), set(response.columns))
+
+    def assert_positions(self, response):
+        self.assertIsInstance(response, pd.DataFrame)
+        self.assertTrue(len(response) > 0)
+        self.assertEqual(set(self.position_column_names), set(response.columns))
+
+    def assert_transactions(self, response):
+        self.assertIsInstance(response, pd.DataFrame)
+        self.assertTrue(len(response) > 0)
+        self.assertEqual(set(self.transaction_column_names), set(response.columns))
 
     async def test___init__(self):
         """Test Initialization."""
@@ -150,34 +302,90 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         async with APIPaths() as api:
             self.assertIsInstance(api, APIPaths)
 
-    async def test_get_model_portfolios(self):
-        """List the available models on the system linked to the Model Manager."""
-        index_names = ["model_ticker", "model_portfolio_id", "name"]
-        async with APIPaths() as api:
-            response = await api.get_models()
-            self.assertIsInstance(response, pd.DataFrame)
-            self.assertEqual(index_names, response.columns.to_list()[0:3])
-
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
-        # Data Gathering awaitable
 
+        # Data Gathering awaitable
         async def get_results():
             async with APIPaths() as api:
                 tasks_list = list()
+                # Create all tasks
                 tasks_list.append(api.get_models())
                 tasks_list.append(api.get_instruments())
+                tasks_list.append(api.get_investors())
+                # Gether task to run
                 results = await asyncio.gather(*tasks_list)
             return results
 
-        # Run all tasks
-        models, instruments = asyncio.run(get_results())
+        # Run three tasks
+        models, instruments, investors = asyncio.run(get_results())
+        self.assertIsInstance(models, pd.DataFrame)
+        self.assertTrue(len(models) > 0)
+        self.assertEqual(set(self.model_column_names), set(models.columns))
+        self.assertIsInstance(instruments, pd.DataFrame)
+        self.assertTrue(len(instruments) > 0)
+        self.assertEqual(set(self.instrument_column_names), set(instruments.columns))
+        self.assertIsInstance(investors, pd.DataFrame)
+        self.assertTrue(len(investors) > 0)
+        self.assertEqual(set(self.investor_column_names), set(investors.columns))
 
-    # TODO: Write the rest of the `get` method tests
+    async def test_get_models(self):
+        """List the available models on the system linked to the Model Manager."""
+        async with APIPaths() as api:
+            response = await api.get_models()
+            self.assert_models(response)
+
+    async def test_get_instruments(self):
+        """List the available instruments on the system."""
+        async with APIPaths() as api:
+            response = await api.get_instruments()
+            self.assert_instruments(response)
+
+    async def test_get_investors(self):
+        """List the available investors on the system."""
+        async with APIPaths() as api:
+            response = await api.get_investors()
+            self.assert_investors(response)
+
+    async def test_get_positions(self):
+        """List the available positions on the system."""
+        async with APIPaths() as api:
+            response = await api.get_positions(date=self.test_date)
+            self.assert_positions(response)
+
+    async def test_get_transactions(self):
+        """List the available transactions on the system."""
+        async with APIPaths() as api:
+            response = await api.get_transactions(date=self.test_date)
+            self.assert_transactions(response)
+
+
+class TestData(unittest.TestCase):
+    """Test the Data class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        # Date on which there were transactions
+        cls.test_date = TEST_DATE
+        # Use the direct/non-async API    #
+        api = APIDirect()
+        # Get API data
+        cls.data = api.get_api_data(from_date=cls.test_date, to_date=cls.test_date)
+
+    def test___init__(self):
+        """Test Initialization."""
+        # Is this a Data class ?
+        # Create Data instance
+        self.assertIsInstance(self.data, Data)
 
 
 class TestCache(unittest.TestCase):
-    """Get, integrate and cache data in a standard column format."""
+    """Test the Cache class with a mock ``Data`` class.
+
+    Use the unittest.mock package to create a mock ``Data`` class.
+
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -186,22 +394,93 @@ class TestCache(unittest.TestCase):
         cls.from_date = datetime.date(2021, 8, 7)
         cls.to_date = datetime.date(2021, 8, 10)
 
-    def setUp(self):
-        """Set up one test."""
-        pass
+        # Mock data to be used in the file
+        cls.mock_file_data = "mock cache data"
 
-    def test_cache_api_equality(self):
-        """Get cache data and verify against the API data.
+        # Set up the mock file
+        cls.mock_file = mock_open(read_data=cls.mock_file_data)
+        cls.patcher = patch("builtins.open", cls.mock_file)
+        cls.patcher.start()
 
-        This only works if the cache has the data in the test date range.
+    @classmethod
+    def tearDownClass(cls):
+        # Stop patching 'open'
+        cls.patcher.stop()
+
+    def test_write_cache(self):
+        """Test the write_cache_data method.
+
+        Use the unittest.mock package to create a mock ``Data`` class.
+
         """
-        cache_data = self.cache.get_cache_data(self.from_date, self.to_date)
-        api_data = self.cache.get_api_data(self.from_date, self.to_date)
-        # Do not test basics data equality as this can change at any moment.
-        pass
-        # Test time series equality
-        pd.testing.assert_frame_equal(cache_data.positions, api_data.positions)
-        pd.testing.assert_frame_equal(cache_data.transactions, api_data.transactions)
+
+
+class TestAPIDirect(unittest.TestCase):
+    """A test class for finworks.APIPaths.
+
+    The test date is 2023-12-20.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        # Re-use the TestAPIPaths.setUpClass fixtures.
+        test_api_paths = TestAPIPaths()
+        test_api_paths.setUpClass()
+        cls.test_date = test_api_paths.test_date
+        # Re-use the TestAPIPaths.setUpClass assert_ methods.
+        cls.api_paths_class = test_api_paths
+        # Result column names for get methods
+        cls.model_column_names = test_api_paths.model_column_names
+        cls.instrument_column_names = test_api_paths.instrument_column_names
+        cls.investor_column_names = test_api_paths.investor_column_names
+        cls.position_column_names = test_api_paths.position_column_names
+        cls.transaction_column_names = test_api_paths.transaction_column_names
+        # Get APIDirect instance
+        cls.api = APIDirect()
+
+    def test_get_models(self):
+        """Test the get_models method."""
+        response = self.api.get_models()
+        self.api_paths_class.assert_models(response)
+
+    def test_get_instruments(self):
+        """Test the get_instruments method."""
+        response = self.api.get_instruments()
+        self.api_paths_class.assert_instruments(response)
+
+    def test_get_investors(self):
+        """Test the get_investors method."""
+        response = self.api.get_investors()
+        self.api_paths_class.assert_investors(response)
+
+    def test_get_positions(self):
+        """Test the get_positions method."""
+        response = self.api.get_positions(date=self.test_date)
+        self.api_paths_class.assert_positions(response)
+
+    def test_get_transactions(self):
+        """Test the get_transactions method."""
+        response = self.api.get_transactions(date=self.test_date)
+        self.api_paths_class.assert_transactions(response)
+
+    def test_get_api_basics_data(self):
+        """Test the get_api_basics_data method."""
+        models, instruments, investors = self.api.get_api_basics_data()
+        self.api_paths_class.assert_models(models)
+        self.api_paths_class.assert_instruments(instruments)
+        self.api_paths_class.assert_investors(investors)
+
+    def test_get_api_time_series(self):
+        """Test the get_api_time_series method."""
+        positions, transactions = self.api.get_api_time_series(date=self.test_date)
+        self.api_paths_class.assert_positions(positions)
+        self.api_paths_class.assert_transactions(transactions)
+
+    def test_get_api_data(self):
+        """Test the get_api_data method."""
+        data = self.api.get_api_data(date=self.test_date)
+        self.assertTrue(isinstance(data, Data))
 
 
 class Suite(object):
@@ -213,8 +492,11 @@ class Suite(object):
 
         test_classes = [
             TestSSLCertificates,
-            TestAPI,
             TestAPIPaths,
+            TestAPISessionManager,
+            TestAPIDirect,
+            TestData,
+            TestCache,
         ]
 
         suites_list = list()
