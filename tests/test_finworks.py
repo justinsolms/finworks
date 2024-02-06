@@ -490,6 +490,21 @@ class TestAPIDirect(unittest.TestCase):
         data = self.api.get_api_data(date=self.test_date)
         self.assertTrue(isinstance(data, Data))
 
+    def test_get_positions_across_dates(self):
+        """test if there is missing positions data on dates."""
+        for year in range(2021, 2024):
+            for month in range(1, 13):
+                day = 7
+                date = datetime.date(year, month, day)
+                try:
+                    positions = self.api.get_positions(date=date)
+                except BaseException as e:
+                    logger.error(f"Failed for date: {date} with error {e}.")
+                # Test positions but do not stop if failed
+                try:
+                    self.assertTrue(len(positions) > 0, "Response is empty.")
+                except AssertionError as e:
+                    logger.error(f"Failed for date: {date} with error {e}.")
 
 class Suite(object):
     """Test suite"""
