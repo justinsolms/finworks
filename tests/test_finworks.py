@@ -26,18 +26,15 @@ from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
 
+# Define test date ony in a single place
+from fundmanage3.finworks import TEST_DATE
+
 # Get module-named logger.
 logger = logging.getLogger(__name__)
 
 # import warnings
 # warnings.filterwarnings(
 #     action="ignore", message="unclosed", category=ResourceWarning)
-
-
-# Date on which there are transactions too. Note that there should always be
-# positions. See rebalance instructions emails to Maggie on the 13 Dec'23.
-TEST_DATE = datetime.date(2023, 12, 13)  # Should be rebalance sell trades
-TEST_DATE = datetime.date(2023, 12, 14)  # Should be rebalance buy trades
 
 def sync_runner(async_function):
     """A little cheat to run coroutines synchronously."""
