@@ -35,8 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 # Date on which there are transactions too. Note that there should always be
-# positions.
-TEST_DATE = datetime.date(2023, 12, 15)
+# positions. See rebalance instructions emails to Maggie on the 13 Dec'23.
+TEST_DATE = datetime.date(2023, 12, 13)  # Should be rebalance sell trades
+TEST_DATE = datetime.date(2023, 12, 14)  # Should be rebalance buy trades
 
 def sync_runner(async_function):
     """A little cheat to run coroutines synchronously."""
