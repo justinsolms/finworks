@@ -241,7 +241,7 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         ]
         cls.investor_column_names = [
             "investor_id",
-            "id_doc_number",
+            "id_number",
             "uuid",
             "model_portfolio_id",
             "take_on_date",
