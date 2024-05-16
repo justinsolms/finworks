@@ -240,9 +240,10 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
             "isin",
         ]
         cls.investor_column_names = [
-            "investor_id",
+            "client_account_id",
+            "contract_id",
+            "contract_number",
             "id_number",
-            "uuid",
             "model_portfolio_id",
             "take_on_date",
             "status",
@@ -290,6 +291,13 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
         self.assertTrue(len(response) > 0, "Response is empty.")
         self.assertEqual(set(self.investor_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
+        # Test no missing values in client_account_id
+        self.assertFalse(response["client_account_id"].isnull().values.any(), "Missing values in client_account_id.")
+        # Test unique values for client_account_id
+        self.assertTrue(response["client_account_id"].is_unique, "Non-unique client_account_id.")
+        # Test that no two values in contract_id have a common value in client_account_id
+        unique_pairs = response[["client_account_id", "contract_id"]].drop_duplicates()
+        self.assertTrue(unique_pairs["client_account_id"].is_unique, "Values in contract_id have a common value in client_account_id.")
 
     def assert_positions(self, response):
         self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
