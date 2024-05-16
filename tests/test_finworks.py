@@ -233,11 +233,12 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
             "value",
         ]
         cls.instrument_column_names = [
-            "status",
-            "ticker",
-            "instrument_id",
-            "currency",
             "isin",
+            "instrument_id",
+            "ticker",
+            "instrument_type",
+            "status",
+            "currency",
         ]
         cls.investor_column_names = [
             "client_account_id",
@@ -286,6 +287,13 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
         self.assertTrue(len(response) > 0, "Response is empty.")
         self.assertEqual(set(self.instrument_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
+        # Test that column isin is unique
+        self.assertTrue(response["isin"].is_unique, "Non-unique isin.")
+        # Test that column instrument_id is unique
+        self.assertTrue(response["instrument_id"].is_unique, "Non-unique instrument_id.")
+        # Test that there is a one-to-one relationship between isin and instrument_id
+        one_to_one = response.groupby('isin')['instrument_id'].nunique().max() == 1 and response.groupby('instrument_id')['isin'].nunique().max() == 1
+        self.assertTrue(one_to_one, "There isn't a one-to-one relationship between isin and instrument_id.")
 
     def assert_investors(self, response):
         self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
