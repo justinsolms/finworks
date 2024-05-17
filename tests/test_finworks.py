@@ -224,112 +224,28 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         """Set up class test fixtures."""
         # Date on which there were transactions
         cls.test_date = TEST_DATE
-        # Result column names for get methods
-        cls.model_column_names = [
-            "model_ticker",
-            "name",
-            "model_portfolio_id",
-            "instrument_id",
-            "value",
-        ]
-        cls.instrument_column_names = [
-            "isin",
-            "instrument_id",
-            "ticker",
-            "instrument_type",
-            "status",
-            "currency",
-        ]
-        cls.investor_column_names = [
-            "client_account_id",
-            "contract_id",
-            "contract_number",
-            "id_number",
-            "model_portfolio_id",
-            "take_on_date",
-            "status",
-            "active",
-            "name",
-        ]
-        cls.position_column_names = [
-            "date",
-            "price_date",
-            "investor_id",
-            "instrument_id",
-            "type",
-            "currency",
-            "price",
-            "units",
-            "value",
-        ]
-        cls.transaction_column_names = [
-            "date",
-            "processed_date",
-            "is_cashflow",
-            "type",
-            "sub_type",
-            "investor_id",
-            "transaction_id",
-            "instrument_id",
-            "currency",
-            "price",
-            "units",
-            "value",
-            "description",
-        ]
 
-    def assert_models(self, response):
-        self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
-        self.assertTrue(len(response) > 0, "Response is empty.")
-        self.assertEqual(set(self.model_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
-
-    def assert_instruments(self, response):
-        self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
-        self.assertTrue(len(response) > 0, "Response is empty.")
-        self.assertEqual(set(self.instrument_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
-        # Test that column isin is unique
-        self.assertTrue(response["isin"].is_unique, "Non-unique isin.")
-        # Test that column instrument_id is unique
-        self.assertTrue(response["instrument_id"].is_unique, "Non-unique instrument_id.")
-        # Test that there is a one-to-one relationship between isin and instrument_id
-        one_to_one = response.groupby('isin')['instrument_id'].nunique().max() == 1 and response.groupby('instrument_id')['isin'].nunique().max() == 1
-        self.assertTrue(one_to_one, "There isn't a one-to-one relationship between isin and instrument_id.")
-
-    def assert_investors(self, response):
-        self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
-        self.assertTrue(len(response) > 0, "Response is empty.")
-        self.assertEqual(set(self.investor_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
-        # Test no missing values in client_account_id
-        self.assertFalse(response["client_account_id"].isnull().values.any(), "Missing values in client_account_id.")
-        # Test unique values for client_account_id
-        self.assertTrue(response["client_account_id"].is_unique, "Non-unique client_account_id.")
-        # Test that no two values in contract_id have a common value in client_account_id
-        unique_pairs = response[["client_account_id", "contract_id"]].drop_duplicates()
-        self.assertTrue(unique_pairs["client_account_id"].is_unique, "Values in contract_id have a common value in client_account_id.")
-
-    def assert_positions(self, response):
-        self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
-        self.assertTrue(len(response) > 0, "Response is empty.")
-        self.assertEqual(set(self.position_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
-
-    def assert_transactions(self, response):
-        self.assertIsInstance(response, pd.DataFrame, "Response is not a DataFrame")
-        self.assertTrue(len(response) > 0, "Response is empty.")
-        self.assertEqual(set(self.transaction_column_names), set(response.columns), "Unexpected columns in response DataFrame.")
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use test data to save API hits and time
+        self.use_test_data = True
+        self.api_obj = APIPaths(use_test_data=self.use_test_data)
 
     async def test___init__(self):
         """Test Initialization."""
         # Is this a subclass of _API?
-        async with APIPaths() as api:
+        async with self.api_obj as api:
             self.assertIsInstance(api, APIPaths)
 
     @unittest.skip
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
 
+        # NOTE: the lack of assert statements in this test is intentional dur to the built in checks in the called methods.
+
         # Data Gathering awaitable
         async def get_results():
-            async with APIPaths() as api:
+            async with self.api_obj as api:
                 tasks_list = list()
                 # Create all tasks
                 tasks_list.append(api.get_models())
@@ -341,45 +257,31 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
 
         # Run three tasks
         models, instruments, investors = asyncio.run(get_results())
-        self.assertIsInstance(models, pd.DataFrame)
-        self.assertTrue(len(models) > 0)
-        self.assertEqual(set(self.model_column_names), set(models.columns))
-        self.assertIsInstance(instruments, pd.DataFrame)
-        self.assertTrue(len(instruments) > 0)
-        self.assertEqual(set(self.instrument_column_names), set(instruments.columns))
-        self.assertIsInstance(investors, pd.DataFrame)
-        self.assertTrue(len(investors) > 0)
-        self.assertEqual(set(self.investor_column_names), set(investors.columns))
 
     async def test_get_models(self):
         """List the available models on the system linked to the Model Manager."""
-        async with APIPaths() as api:
-            response = await api.get_models()
-            self.assert_models(response)
+        async with self.api_obj as api:
+            await api.get_models()
 
     async def test_get_instruments(self):
         """List the available instruments on the system."""
-        async with APIPaths() as api:
-            response = await api.get_instruments()
-            self.assert_instruments(response)
+        async with self.api_obj as api:
+            await api.get_instruments()
 
     async def test_get_investors(self):
         """List the available investors on the system."""
-        async with APIPaths() as api:
-            response = await api.get_investors()
-            self.assert_investors(response)
+        async with self.api_obj as api:
+            await api.get_investors()
 
     async def test_get_positions(self):
         """List the available positions on the system."""
-        async with APIPaths() as api:
-            response = await api.get_positions(date=self.test_date)
-            self.assert_positions(response)
+        async with self.api_obj as api:
+            await api.get_positions(date=self.test_date)
 
     async def test_get_transactions(self):
         """List the available transactions on the system."""
-        async with APIPaths() as api:
-            response = await api.get_transactions(date=self.test_date)
-            self.assert_transactions(response)
+        async with self.api_obj as api:
+            await api.get_transactions(date=self.test_date)
 
 
 class TestData(unittest.TestCase):
@@ -458,8 +360,12 @@ class TestAPIDirect(unittest.TestCase):
         cls.investor_column_names = test_api_paths.investor_column_names
         cls.position_column_names = test_api_paths.position_column_names
         cls.transaction_column_names = test_api_paths.transaction_column_names
-        # Get APIDirect instance
-        cls.api = APIDirect()
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use test data to save API hits and time
+        self.use_test_data = True
+        self.api = APIDirect(use_test_data=self.use_test_data)
 
     def test_get_models(self):
         """Test the get_models method."""
@@ -519,6 +425,7 @@ class TestAPIDirect(unittest.TestCase):
                     self.assertTrue(len(positions) > 0, "Response is empty.")
                 except AssertionError as e:
                     logger.error(f"Failed for date: {date} with error {e}.")
+
 
 class Suite(object):
     """Test suite"""
