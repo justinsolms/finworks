@@ -237,7 +237,6 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
         async with self.api_obj as api:
             self.assertIsInstance(api, APIPaths)
 
-    @unittest.skip
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
 
@@ -367,43 +366,35 @@ class TestAPIDirect(unittest.TestCase):
         self.use_test_data = True
         self.api = APIDirect(use_test_data=self.use_test_data)
 
+        # NOTE: the lack of assert statements in this test is intentional dur to the built in checks in the called methods.
+
     def test_get_models(self):
         """Test the get_models method."""
-        response = self.api.get_models()
-        self.api_paths_class.assert_models(response)
+        self.api.get_models()
 
     def test_get_instruments(self):
         """Test the get_instruments method."""
-        response = self.api.get_instruments()
-        self.api_paths_class.assert_instruments(response)
+        self.api.get_instruments()
 
     def test_get_investors(self):
         """Test the get_investors method."""
-        response = self.api.get_investors()
-        self.api_paths_class.assert_investors(response)
+        self.api.get_investors()
 
     def test_get_positions(self):
         """Test the get_positions method."""
-        response = self.api.get_positions(date=self.test_date)
-        self.api_paths_class.assert_positions(response)
+        self.api.get_positions(date=self.test_date)
 
     def test_get_transactions(self):
         """Test the get_transactions method."""
-        response = self.api.get_transactions(date=self.test_date)
-        self.api_paths_class.assert_transactions(response)
+        self.api.get_transactions(date=self.test_date)
 
     def test_get_api_basics_data(self):
         """Test the get_api_basics_data method."""
         models, instruments, investors = self.api.get_api_basics_data()
-        self.api_paths_class.assert_models(models)
-        self.api_paths_class.assert_instruments(instruments)
-        self.api_paths_class.assert_investors(investors)
 
     def test_get_api_time_series(self):
         """Test the get_api_time_series method."""
         positions, transactions = self.api.get_api_time_series(date=self.test_date)
-        self.api_paths_class.assert_positions(positions)
-        self.api_paths_class.assert_transactions(transactions)
 
     def test_get_api_data(self):
         """Test the get_api_data method."""
