@@ -25,6 +25,8 @@ from unittest.mock import patch, AsyncMock
 from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
+from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from fundmanage3.finworks import PositionsFrame, TransactionsFrame
 
 # Define test date ony in a single place
 from fundmanage3.finworks import TEST_DATE
@@ -256,31 +258,39 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
 
         # Run three tasks
         models, instruments, investors = asyncio.run(get_results())
+        self.assertIsInstance(models, ModelsFrame)
+        self.assertIsInstance(instruments, InstrumentsFrame)
+        self.assertIsInstance(investors, InvestorsFrame)
 
     async def test_get_models(self):
         """List the available models on the system linked to the Model Manager."""
         async with self.api_obj as api:
-            await api.get_models()
+            obj = await api.get_models()
+            self.assertIsInstance(obj, ModelsFrame)
 
     async def test_get_instruments(self):
         """List the available instruments on the system."""
         async with self.api_obj as api:
-            await api.get_instruments()
+            obj = await api.get_instruments()
+            self.assertIsInstance(obj, InstrumentsFrame)
 
     async def test_get_investors(self):
         """List the available investors on the system."""
         async with self.api_obj as api:
-            await api.get_investors()
+            obj = await api.get_investors()
+            self.assertIsInstance(obj, InvestorsFrame)
 
     async def test_get_positions(self):
         """List the available positions on the system."""
         async with self.api_obj as api:
-            await api.get_positions(date=self.test_date)
+            obj = await api.get_positions(date=self.test_date)
+            self.assertIsInstance(obj, PositionsFrame)
 
     async def test_get_transactions(self):
         """List the available transactions on the system."""
         async with self.api_obj as api:
-            await api.get_transactions(date=self.test_date)
+            obj = await api.get_transactions(date=self.test_date)
+            self.assertIsInstance(obj, TransactionsFrame)
 
 
 class TestData(unittest.TestCase):
@@ -353,12 +363,6 @@ class TestAPIDirect(unittest.TestCase):
         cls.test_date = test_api_paths.test_date
         # Re-use the TestAPIPaths.setUpClass assert_ methods.
         cls.api_paths_class = test_api_paths
-        # Result column names for get methods
-        cls.model_column_names = test_api_paths.model_column_names
-        cls.instrument_column_names = test_api_paths.instrument_column_names
-        cls.investor_column_names = test_api_paths.investor_column_names
-        cls.position_column_names = test_api_paths.position_column_names
-        cls.transaction_column_names = test_api_paths.transaction_column_names
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -370,35 +374,45 @@ class TestAPIDirect(unittest.TestCase):
 
     def test_get_models(self):
         """Test the get_models method."""
-        self.api.get_models()
+        obj = self.api.get_models()
+        self.assertIsInstance(obj, ModelsFrame)
 
     def test_get_instruments(self):
         """Test the get_instruments method."""
-        self.api.get_instruments()
+        obj = self.api.get_instruments()
+        self.assertIsInstance(obj, InstrumentsFrame)
 
     def test_get_investors(self):
         """Test the get_investors method."""
-        self.api.get_investors()
+        obj = self.api.get_investors()
+        self.assertIsInstance(obj, InvestorsFrame)
 
     def test_get_positions(self):
         """Test the get_positions method."""
-        self.api.get_positions(date=self.test_date)
+        obj = self.api.get_positions(date=self.test_date)
+        self.assertIsInstance(obj, PositionsFrame)
 
     def test_get_transactions(self):
         """Test the get_transactions method."""
-        self.api.get_transactions(date=self.test_date)
+        obj = self.api.get_transactions(date=self.test_date)
+        self.assertIsInstance(obj, TransactionsFrame)
 
     def test_get_api_basics_data(self):
         """Test the get_api_basics_data method."""
         models, instruments, investors = self.api.get_api_basics_data()
+        self.assertIsInstance(models, ModelsFrame)
+        self.assertIsInstance(instruments, InstrumentsFrame)
+        self.assertIsInstance(investors, InvestorsFrame)
 
     def test_get_api_time_series(self):
         """Test the get_api_time_series method."""
-        positions, transactions = self.api.get_api_time_series(date=self.test_date)
+        positions, transactions = self.api.get_api_time_series(from_date=self.test_date, to_date=self.test_date)
+        self.assertIsInstance(positions, pd.DataFrame)
+        self.assertIsInstance(transactions, pd.DataFrame)
 
     def test_get_api_data(self):
         """Test the get_api_data method."""
-        data = self.api.get_api_data(date=self.test_date)
+        data = self.api.get_api_data(from_date=self.test_date, to_date=self.test_date)
         self.assertTrue(isinstance(data, Data))
 
     def test_get_positions_across_dates(self):
