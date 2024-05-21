@@ -10,6 +10,8 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+
+from abc import ABC
 import asyncio
 import datetime
 import json
@@ -26,6 +28,7 @@ from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import Cache
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from fundmanage3.finworks import TimeSeriesFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
 
 # Define test date ony in a single place
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 # warnings.filterwarnings(
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
+
 def sync_runner(async_function):
     """A little cheat to run coroutines synchronously."""
     # Create a new event loop
@@ -49,6 +53,7 @@ def sync_runner(async_function):
 
     # Close the loop
     loop.close()
+
 
 class TestSSLCertificates(aiounittest.AsyncTestCase):
     """Test suite for the SSL certificates.
@@ -121,7 +126,9 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
         cls.instruments_url = f"https://{cls.domain}{cls.instruments_path}"
         cls.investors_url = f"https://{cls.domain}{cls.investors_path}"
         cls.positions_url = f"https://{cls.domain}{cls.positions_path}?date={TEST_DATE}"
-        cls.transactions_url = f"https://{cls.domain}{cls.transactions_path}?date={TEST_DATE}"
+        cls.transactions_url = (
+            f"https://{cls.domain}{cls.transactions_path}?date={TEST_DATE}"
+        )
         # Test path and URL and params
         cls.test_path = cls.models_path
         cls.test_url = cls.models_url
@@ -214,6 +221,193 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
             self.assertTrue(all(isinstance(item, dict) for item in response))
 
 
+class TestModelsFrame(unittest.TestCase):
+    """Test suite for the ModelsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        cls.cls = ModelsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use the APIDirect class to get the test data
+        self.api = APIDirect(use_test_data=True)
+        self.data = self.api.get_models()
+
+    def test___init__(self):
+        """Test Initialization."""
+        self.assertIsInstance(self.data, ModelsFrame)
+
+
+class TestInstrumentsFrame(unittest.TestCase):
+    """Test suite for the InstrumentsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        cls.cls = InstrumentsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use the APIDirect class to get the test data
+        self.api = APIDirect(use_test_data=True)
+        self.data = self.api.get_instruments()
+
+    def test___init__(self):
+        """Test Initialization."""
+        self.assertIsInstance(self.data, InstrumentsFrame)
+
+
+class TestInvestorsFrame(unittest.TestCase):
+    """Test suite for the InvestorsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        cls.cls = InvestorsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use the APIDirect class to get the test data
+        self.api = APIDirect(use_test_data=True)
+        self.data = self.api.get_investors()
+
+    def test___init__(self):
+        """Test Initialization."""
+        self.assertIsInstance(self.data, InvestorsFrame)
+
+    def test_merge(self):
+        """Test the merge method."""
+        # Get models, instruments, investors
+        models = self.api.get_models()
+        # Merge the data
+        merged = self.data.merge(models)
+        self.assertIsInstance(merged, InvestorsFrame)
+        # Test that the merged DataFrame has the extra columns from the models,
+        # instruments and investors DataFrames. This is already tested in the
+        # class `check` method.
+
+
+class TestTimeSeriesFrame(unittest.TestCase):
+    """Test suite for the TimeSeriesFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        # Date on which there were transactions
+        cls.test_date = TEST_DATE
+        cls.cls = None # NOTE: Must be overridden in the child classes
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use the APIDirect class to get the test data
+        self.api = APIDirect(use_test_data=True)
+        self.data = None  # NOTE: Must be overridden in the child classes
+        self.json_list = None  # NOTE: Must be overridden in the child classes
+        self.data_row = None # NOTE: Must be overridden in the child classes
+
+    def test___init__(self):
+        """Test Initialization."""
+        data = self.cls(self.json_list)
+        self.assertIsInstance(data, self.cls)
+
+    def test_slice(self):
+        """Test the slice method."""
+        data = self.data.slice(from_date=self.data_date, to_date=self.data_date)
+        self.assertIsInstance(data, self.cls)
+        pd.testing.assert_frame_equal(self.data, data)
+
+    def test_update(self):
+        """Test update method."""
+        data1 = self.cls(self.data.copy())
+        data2 = self.cls(self.data.copy())
+        # Trivial update
+        updated = data1.update(data2)
+        self.assertIsInstance(updated, self.cls)
+        # Test if the update DataFrame and the original are equal whilst
+        # ignoring the index of both which won't be the same.
+        updated = updated.reset_index(drop=True)
+        original = self.data.reset_index(drop=True)
+        pd.testing.assert_frame_equal(updated, original)
+
+    def test_merge(self):
+        """Test the merge method."""
+        # Get models, instruments, investors
+        models = self.api.get_models()
+        instruments = self.api.get_instruments()
+        investors = self.api.get_investors()
+        # Merge the data
+        merged = self.data.merge(models, instruments, investors)
+        self.assertIsInstance(merged, self.cls)
+        # Test that the merged DataFrame has the extra columns from the models,
+        # instruments and investors DataFrames. This is already tested in the
+        # class `check` method.
+
+    def test_concat(self):
+        """Test the concat method."""
+        updated = self.cls.concat([self.data, self.data_row])
+        self.assertIsInstance(updated, self.cls)
+        # Test that the last row of the updated DataFrame is the same as the
+        # data row that was appended.
+        df1 = updated.tail(1).reset_index(drop=True)
+        df2 = self.data_row.reset_index(drop=True)
+        pd.testing.assert_frame_equal(df1, df2)
+
+
+class TestPositionsFrame(TestTimeSeriesFrame):
+    """Test suite for the TestPositionsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        super().setUpClass()
+        cls.cls = PositionsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        super().setUp()
+        self.data = self.api.get_positions(date=self.test_date)
+        self.assertIsInstance(self.data, PositionsFrame)
+        self.json_list = self.data.to_dict(orient="records")
+        self.data_date = self.data.date.drop_duplicates().values[0]
+        # Make an extra PositionsFrame with a row of new data
+        # Use last row of the data as the data row and modify it.
+        self.data_row = self.data.iloc[-1].copy()
+        # Mods so that the new row passes uniqueness tests
+        self.data_row.contract_id = '61173906569'
+        self.data_row.client_account_id = '7373856027'
+        self.data_row.instrument_id = '889880429'
+        self.data_row = self.cls(self.data_row.to_frame().T)
+
+
+class TestTransactionsFrame(TestTimeSeriesFrame):
+    """Test suite for the TestTransactionsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        super().setUpClass()
+        cls.cls = TransactionsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        super().setUp()
+        self.data = self.api.get_transactions(date=self.test_date)
+        self.assertIsInstance(self.data, TransactionsFrame)
+        self.json_list = self.data.to_dict(orient="records")
+        self.data_date = self.data.date.drop_duplicates().values[0]
+        # Make an extra TransactionsFrame with a row of new data
+        # Use last row of the data as the data row and modify it.
+        self.data_row = self.data.iloc[-1].copy()
+        # Mods so that the new row passes uniqueness tests
+        self.data_row.transaction_id = '208542467229'
+        self.data_row.contract_id = '61173906569'
+        self.data_row.client_account_id = '7373856027'
+        self.data_row.instrument_id = '889880429'
+        self.data_row = self.cls(self.data_row.to_frame().T)
+
+
 class TestAPIPaths(aiounittest.AsyncTestCase):
     """Test suite for the APIPaths class.
 
@@ -301,51 +495,20 @@ class TestData(unittest.TestCase):
         """Set up class test fixtures."""
         # Date on which there were transactions
         cls.test_date = TEST_DATE
-        # Use the direct/non-async API    #
-        api = APIDirect()
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Use test data to save API hits and time
+        self.use_test_data = True
+        self.api = APIDirect(use_test_data=self.use_test_data)
         # Get API data
-        cls.data = api.get_api_data(from_date=cls.test_date, to_date=cls.test_date)
+        self.data = self.api.get_api_data(from_date=self.test_date, to_date=self.test_date)
 
     def test___init__(self):
         """Test Initialization."""
         # Is this a Data class ?
         # Create Data instance
         self.assertIsInstance(self.data, Data)
-
-
-class TestCache(unittest.TestCase):
-    """Test the Cache class with a mock ``Data`` class.
-
-    Use the unittest.mock package to create a mock ``Data`` class.
-
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        """Set up class test fixtures."""
-        cls.cache = Cache()
-        cls.from_date = datetime.date(2021, 8, 7)
-        cls.to_date = datetime.date(2021, 8, 10)
-
-        # Mock data to be used in the file
-        cls.mock_file_data = "mock cache data"
-
-        # Set up the mock file
-        cls.mock_file = mock_open(read_data=cls.mock_file_data)
-        cls.patcher = patch("builtins.open", cls.mock_file)
-        cls.patcher.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        # Stop patching 'open'
-        cls.patcher.stop()
-
-    def test_write_cache(self):
-        """Test the write_cache_data method.
-
-        Use the unittest.mock package to create a mock ``Data`` class.
-
-        """
 
 
 class TestAPIDirect(unittest.TestCase):
@@ -406,15 +569,23 @@ class TestAPIDirect(unittest.TestCase):
 
     def test_get_api_time_series(self):
         """Test the get_api_time_series method."""
-        positions, transactions = self.api.get_api_time_series(from_date=self.test_date, to_date=self.test_date)
-        self.assertIsInstance(positions, pd.DataFrame)
-        self.assertIsInstance(transactions, pd.DataFrame)
+        positions, transactions = self.api.get_api_time_series(
+            from_date=self.test_date, to_date=self.test_date
+        )
+        self.assertIsInstance(positions, PositionsFrame)
+        self.assertIsInstance(transactions, TransactionsFrame)
 
     def test_get_api_data(self):
         """Test the get_api_data method."""
         data = self.api.get_api_data(from_date=self.test_date, to_date=self.test_date)
         self.assertTrue(isinstance(data, Data))
+        self.assertIsInstance(data.models, ModelsFrame)
+        self.assertIsInstance(data.instruments, InstrumentsFrame)
+        self.assertIsInstance(data.investors, InvestorsFrame)
+        self.assertIsInstance(data.positions, PositionsFrame)
+        self.assertIsInstance(data.transactions, TransactionsFrame)
 
+    @unittest.skip("Test is too for actual API data and isn't appropriate here.")
     def test_get_positions_across_dates(self):
         """test if there is missing positions data on dates."""
         for year in range(2021, 2024):
