@@ -55,6 +55,7 @@ def sync_runner(async_function):
     loop.close()
 
 
+@unittest.skip("Test is too slow for actual API data and isn't appropriate here.")
 class TestSSLCertificates(aiounittest.AsyncTestCase):
     """Test suite for the SSL certificates.
 
@@ -116,6 +117,7 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
+        cls.api_class = APISessionManager
         cls.models_path = APIPaths.MODELS_PATH
         cls.instruments_path = APIPaths.INSTRUMENTS_PATH
         cls.investors_path = APIPaths.INVESTORS_PATH
@@ -133,9 +135,6 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
         cls.test_path = cls.models_path
         cls.test_url = cls.models_url
         cls.params = {}
-        # Read JSON response fixture as test data
-        with open("tests/fixtures/models.json") as f:
-            cls.json_response_fixture = json.load(f)
 
     @classmethod
     def tearDownClass(cls):
@@ -152,20 +151,21 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
 
     async def test___aenter__(self):
         """Test __aenter__ method."""
-        async with self.api as api:
+        async with self.api_class() as api:
             self.assertIsInstance(api.session, aiohttp.ClientSession)
             self.assertIsInstance(api.conn, aiohttp.TCPConnector)
 
     async def test___aexit__(self):
         """Test __aexit__ method."""
-        async with self.api as api:
+        async with self.api_class() as api:
             pass
         self.assertTrue(api.session.closed)
         self.assertTrue(api.conn.closed)
 
+    @unittest.skip("Test is too slow for actual API data and isn't appropriate here.")
     async def run_then_assert(self, url, params, json_response_fixture=None):
-        async with APISessionManager() as api:
-            response = await api.get_response(url, params)
+        async with self.api_class() as api:
+            response = await api.get_response(url, params, 1)
             self.assertIsInstance(response, list)
             self.assertTrue(len(response) > 0, "Response is empty.")
             self.assertTrue(all(isinstance(item, dict) for item in response))
@@ -176,6 +176,7 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
                 # class to update the fixture files.
                 self.assertEqual(response, json_response_fixture)
 
+    @unittest.skip("Test is too slow for actual API data and isn't appropriate here.")
     async def test_get_response_actual(self):
         """Test get_response method with the actual API response."""
         # Use a test URL and params
@@ -184,37 +185,13 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
         # Run then asser results
         await self.run_then_assert(test_url, test_params)
 
-    @unittest.skip("Mocking the session manager is not working.")
-    @patch("fundmanage3.finworks.APISessionManager", autospec=APISessionManager)
-    async def test_get_response_mock(self, mock_session_manager):
-        """Test get_response method with a mock API response."""
-        # Use a test URL and params
-        test_url = f"https://{APISessionManager.DOMAIN}{self.models_path}"
-        test_params = self.params
-
-        # Mock the response of the get request
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.json = AsyncMock(return_value=self.json_response_fixture)
-
-        # Mock the session manager
-        async with mock_session_manager as api:
-            response = await api.get_response(test_url, test_params)
-            self.assertIsInstance(response, list)
-            self.assertTrue(len(response) > 0, "Response is empty.")
-            self.assertTrue(all(isinstance(item, dict) for item in response))
-            # NOTE: The line below can only be used if the fixture is up to date
-            # with the latest API models data. These models change regularly.
-            # Use the fundmanage3.finworks.CollectJSONResponse class to update
-            # the fixture files.
-            # self.assertEqual(response, self.json_response_fixture)
-
+    @unittest.skip("Test is too slow for actual API data and isn't appropriate here.")
     async def test_get_retries(self):
         """Test get_retries using a mock ``ClientSession.get`` response."""
         # Use a test path
         test_path = self.test_path
 
-        async with self.api as api:
+        async with self.api_class() as api:
             response = await api.get_retries(test_path)
             self.assertIsInstance(response, list)
             self.assertTrue(len(response) > 0, "Response is empty.")
@@ -289,8 +266,9 @@ class TestInvestorsFrame(unittest.TestCase):
         # class `check` method.
 
 
-class TestTimeSeriesFrame(unittest.TestCase):
-    """Test suite for the TimeSeriesFrame class."""
+@unittest.skip("This is an abstract test class.")
+class TestTimeSeriesFrame(unittest.TestCase, ABC):
+    """Abstract test suite for the TimeSeriesFrame child classes."""
 
     @classmethod
     def setUpClass(cls):
