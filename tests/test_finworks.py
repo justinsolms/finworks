@@ -21,14 +21,10 @@ import unittest
 import aiounittest
 import pandas as pd
 
-from unittest.mock import patch, AsyncMock
-
 # Classes to be tested
 from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
-from fundmanage3.finworks import Cache
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
-from fundmanage3.finworks import TimeSeriesFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
 
 # Define test date ony in a single place
@@ -41,6 +37,8 @@ logger = logging.getLogger(__name__)
 # warnings.filterwarnings(
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
+# Use test data fixtures instead of the actual API data
+USE_TEST_DATA = True
 
 def sync_runner(async_function):
     """A little cheat to run coroutines synchronously."""
@@ -209,7 +207,7 @@ class TestModelsFrame(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Use the APIDirect class to get the test data
-        self.api = APIDirect(use_test_data=True)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
         self.data = self.api.get_models()
 
     def test___init__(self):
@@ -228,7 +226,7 @@ class TestInstrumentsFrame(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Use the APIDirect class to get the test data
-        self.api = APIDirect(use_test_data=True)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
         self.data = self.api.get_instruments()
 
     def test___init__(self):
@@ -247,7 +245,7 @@ class TestInvestorsFrame(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Use the APIDirect class to get the test data
-        self.api = APIDirect(use_test_data=True)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
         self.data = self.api.get_investors()
 
     def test___init__(self):
@@ -266,8 +264,7 @@ class TestInvestorsFrame(unittest.TestCase):
         # class `check` method.
 
 
-@unittest.skip("This is an abstract test class.")
-class TestTimeSeriesFrame(unittest.TestCase, ABC):
+class ABCTestTimeSeriesFrame(ABC, unittest.TestCase):
     """Abstract test suite for the TimeSeriesFrame child classes."""
 
     @classmethod
@@ -280,7 +277,7 @@ class TestTimeSeriesFrame(unittest.TestCase, ABC):
     def setUp(self):
         """Set up test case fixtures."""
         # Use the APIDirect class to get the test data
-        self.api = APIDirect(use_test_data=True)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
         self.data = None  # NOTE: Must be overridden in the child classes
         self.json_list = None  # NOTE: Must be overridden in the child classes
         self.data_row = None # NOTE: Must be overridden in the child classes
@@ -298,16 +295,14 @@ class TestTimeSeriesFrame(unittest.TestCase, ABC):
 
     def test_update(self):
         """Test update method."""
-        data1 = self.cls(self.data.copy())
-        data2 = self.cls(self.data.copy())
-        # Trivial update
-        updated = data1.update(data2)
+        updated = self.data.update(self.data_row)
         self.assertIsInstance(updated, self.cls)
-        # Test if the update DataFrame and the original are equal whilst
-        # ignoring the index of both which won't be the same.
-        updated = updated.reset_index(drop=True)
-        original = self.data.reset_index(drop=True)
-        pd.testing.assert_frame_equal(updated, original)
+        # Test that the last row of the updated DataFrame is the same as the
+        # data row that was appended.
+        transaction_id = self.data_row.transaction_id.values[0]
+        df1 = updated[updated.transaction_id==transaction_id].reset_index(drop=True)
+        df2 = self.data_row.reset_index(drop=True)
+        pd.testing.assert_frame_equal(df1, df2)
 
     def test_merge(self):
         """Test the merge method."""
@@ -333,7 +328,7 @@ class TestTimeSeriesFrame(unittest.TestCase, ABC):
         pd.testing.assert_frame_equal(df1, df2)
 
 
-class TestPositionsFrame(TestTimeSeriesFrame):
+class TestPositionsFrame(ABCTestTimeSeriesFrame):
     """Test suite for the TestPositionsFrame class."""
 
     @classmethod
@@ -359,7 +354,7 @@ class TestPositionsFrame(TestTimeSeriesFrame):
         self.data_row = self.cls(self.data_row.to_frame().T)
 
 
-class TestTransactionsFrame(TestTimeSeriesFrame):
+class TestTransactionsFrame(ABCTestTimeSeriesFrame):
     """Test suite for the TestTransactionsFrame class."""
 
     @classmethod
@@ -386,6 +381,40 @@ class TestTransactionsFrame(TestTimeSeriesFrame):
         self.data_row = self.cls(self.data_row.to_frame().T)
 
 
+class TestTransactionsFrameIfEmpty(ABCTestTimeSeriesFrame):
+    """Test suite for the TestTransactionsFrame class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        super().setUpClass()
+        cls.cls = TransactionsFrame
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        super().setUp()
+        self.json_list = []
+        self.data = TransactionsFrame(self.json_list)
+        self.assertIsInstance(self.data, TransactionsFrame)
+        self.data_date = self.test_date
+        # Make an extra TransactionsFrame with a row of new data
+        # Use last row of the data as the data row and modify it.
+        data = self.api.get_transactions(date=self.test_date)
+        self.data_row = data.iloc[-1].copy()
+        # Mods so that the new row passes uniqueness tests
+        self.data_row.transaction_id = '208542467229'
+        self.data_row.contract_id = '61173906569'
+        self.data_row.client_account_id = '7373856027'
+        self.data_row.instrument_id = '889880429'
+        self.data_row = self.cls(self.data_row.to_frame().T)
+
+    def test___init__(self):
+        """Test Initialization."""
+        data = self.cls(self.json_list)
+        self.assertIsInstance(data, self.cls)
+        self.assertTrue(data.empty)
+
+
 class TestAPIPaths(aiounittest.AsyncTestCase):
     """Test suite for the APIPaths class.
 
@@ -402,8 +431,7 @@ class TestAPIPaths(aiounittest.AsyncTestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Use test data to save API hits and time
-        self.use_test_data = True
-        self.api_obj = APIPaths(use_test_data=self.use_test_data)
+        self.api_obj = APIPaths(use_test_data=USE_TEST_DATA)
 
     async def test___init__(self):
         """Test Initialization."""
@@ -477,8 +505,7 @@ class TestData(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Use test data to save API hits and time
-        self.use_test_data = True
-        self.api = APIDirect(use_test_data=self.use_test_data)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
         # Get API data
         self.data = self.api.get_api_data(from_date=self.test_date, to_date=self.test_date)
 
@@ -498,18 +525,12 @@ class TestAPIDirect(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
-        # Re-use the TestAPIPaths.setUpClass fixtures.
-        test_api_paths = TestAPIPaths()
-        test_api_paths.setUpClass()
-        cls.test_date = test_api_paths.test_date
-        # Re-use the TestAPIPaths.setUpClass assert_ methods.
-        cls.api_paths_class = test_api_paths
+        cls.test_date = TEST_DATE
 
     def setUp(self):
         """Set up test case fixtures."""
         # Use test data to save API hits and time
-        self.use_test_data = True
-        self.api = APIDirect(use_test_data=self.use_test_data)
+        self.api = APIDirect(use_test_data=USE_TEST_DATA)
 
         # NOTE: the lack of assert statements in this test is intentional dur to the built in checks in the called methods.
 
