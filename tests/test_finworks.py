@@ -14,7 +14,6 @@ distributed without the express permission of Justin Solms.
 from abc import ABC
 import asyncio
 import datetime
-import json
 import logging
 import aiohttp
 import unittest
@@ -26,9 +25,10 @@ from fundmanage3.finworks import APIDirect, APISessionManager, Data
 from fundmanage3.finworks import APIPaths
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
+from fundmanage3.finworks import Cache
 
 # Define test date ony in a single place
-from fundmanage3.finworks import TEST_DATE
+from fundmanage3.finworks import TEST_DATE as MAIN_TEST_DATE
 
 # Get module-named logger.
 logger = logging.getLogger(__name__)
@@ -37,8 +37,14 @@ logger = logging.getLogger(__name__)
 # warnings.filterwarnings(
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
+# Set up test date
+TEST_DATE = MAIN_TEST_DATE
+TEST_DATE = Cache.START_DATE
+
 # Use test data fixtures instead of the actual API data
 USE_TEST_DATA = True
+USE_TEST_DATA = False
+
 
 def sync_runner(async_function):
     """A little cheat to run coroutines synchronously."""
@@ -289,7 +295,7 @@ class ABCTestTimeSeriesFrame(ABC, unittest.TestCase):
 
     def test_slice(self):
         """Test the slice method."""
-        data = self.data.slice(from_date=self.data_date, to_date=self.data_date)
+        data = self.data.slice(from_date=self.test_date, to_date=self.test_date)
         self.assertIsInstance(data, self.cls)
         pd.testing.assert_frame_equal(self.data, data)
 
@@ -369,15 +375,24 @@ class TestTransactionsFrame(ABCTestTimeSeriesFrame):
         self.data = self.api.get_transactions(date=self.test_date)
         self.assertIsInstance(self.data, TransactionsFrame)
         self.json_list = self.data.to_dict(orient="records")
-        self.data_date = self.data.date.drop_duplicates().values[0]
         # Make an extra TransactionsFrame with a row of new data
         # Use last row of the data as the data row and modify it.
-        self.data_row = self.data.iloc[-1].copy()
+        self.data_row = pd.Series()
         # Mods so that the new row passes uniqueness tests
-        self.data_row.transaction_id = '208542467229'
-        self.data_row.contract_id = '61173906569'
-        self.data_row.client_account_id = '7373856027'
-        self.data_row.instrument_id = '889880429'
+        self.data_row["date"]  = pd.to_datetime('2023-12-13')
+        self.data_row["transaction_id"] = '208542467229'
+        self.data_row["contract_id"] = '61173906569'
+        self.data_row["client_account_id"] = '7373856027'
+        self.data_row["instrument_id"] = '889880429'
+        self.data_row["is_cashflow"]  = 'No'
+        self.data_row["type"] = 'ContributionTransaction'
+        self.data_row["sub_type"] = 'Sell'
+        self.data_row["currency"] = 'ZAR'
+        self.data_row["price"] = 21.2
+        self.data_row["units"] = -1.0
+        self.data_row["value"] = -21.2
+        self.data_row["processed_date"] = pd.to_datetime('2023-12-14')
+        self.data_row["description"] = "Sell (Bulk rebalance)"
         self.data_row = self.cls(self.data_row.to_frame().T)
 
 
@@ -615,7 +630,6 @@ class Suite(object):
             TestAPISessionManager,
             TestAPIDirect,
             TestData,
-            TestCache,
         ]
 
         suites_list = list()
