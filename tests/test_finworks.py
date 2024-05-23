@@ -43,7 +43,6 @@ TEST_DATE = Cache.START_DATE
 
 # Use test data fixtures instead of the actual API data
 USE_TEST_DATA = True
-USE_TEST_DATA = False
 
 
 def sync_runner(async_function):
@@ -295,7 +294,8 @@ class ABCTestTimeSeriesFrame(ABC, unittest.TestCase):
 
     def test_slice(self):
         """Test the slice method."""
-        data = self.data.slice(from_date=self.test_date, to_date=self.test_date)
+        date = self.data.date.drop_duplicates().tolist()[0].date()  # Ugh!!
+        data = self.data.slice(from_date=date, to_date=date)
         self.assertIsInstance(data, self.cls)
         pd.testing.assert_frame_equal(self.data, data)
 
