@@ -15,6 +15,8 @@ from abc import ABC
 import asyncio
 import datetime
 import logging
+import os
+import shutil
 import aiohttp
 import unittest
 import aiounittest
@@ -294,10 +296,14 @@ class ABCTestTimeSeriesFrame(ABC, unittest.TestCase):
 
     def test_slice(self):
         """Test the slice method."""
-        date = self.data.date.drop_duplicates().tolist()[0].date()  # Ugh!!
-        data = self.data.slice(from_date=date, to_date=date)
-        self.assertIsInstance(data, self.cls)
-        pd.testing.assert_frame_equal(self.data, data)
+        date = self.data.date.drop_duplicates().tolist()[0].date()
+        # Trivial slice should keep all the data. Not the best test.
+        from_date = date
+        to_date = date
+        boolean_series = from_date <= self.data.date.dt.date <= to_date
+        sliced = self.positions.slice(boolean_series)
+        self.assertIsInstance(sliced, self.cls)
+        pd.testing.assert_frame_equal(self.data, sliced)
 
     def test_update(self):
         """Test update method."""
@@ -527,8 +533,9 @@ class TestData(unittest.TestCase):
     def test___init__(self):
         """Test Initialization."""
         # Is this a Data class ?
-        # Create Data instance
         self.assertIsInstance(self.data, Data)
+
+
 
 
 class TestAPIDirect(unittest.TestCase):
@@ -616,6 +623,52 @@ class TestAPIDirect(unittest.TestCase):
                 except AssertionError as e:
                     logger.error(f"Failed for date: {date} with error {e}.")
 
+
+class TestCache(unittest.TestCase):
+    """Test the Cache class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class test fixtures."""
+        path = os.path.dirname(__loader__.path)  # This module's file path
+        cls.cache_alt_path = os.path.join(path, 'test_finworks_cache')
+        # These lines must sync with each other in terms of dates
+        cls.increment = 2
+        cls.last_date = Cache.START_DATE + datetime.timedelta(days=cls.increment - 1)
+
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        self.cache = Cache(alt_path=self.cache_alt_path, use_test_data=True)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down class test fixtures."""
+        # Delete any cache files created during testing
+        if os.path.exists(cls.cache_alt_path):
+            # Force the removal of the cache directory and all its contents
+            shutil.rmtree(cls.cache_alt_path)
+
+    def test___init__(self):
+        """Test Initialization."""
+        self.assertIsInstance(self.cache, Cache)
+
+    def test_update(self):
+        """Test the update method."""
+        # Update the cache
+        self.cache.update(increment=self.increment)
+        self.assertEqual(self.last_date, self.cache.get_last_cache_date())
+        data = self.cache.get_cache_data()
+        import ipdb; ipdb.set_trace()
+        pass
+
+    def test_batch_update(self):
+        """Test the batch_update method."""
+        # Update the cache
+        self.cache.batch_update(batch_size=2)
+        self.assertEqual(self.last_date, self.cache.get_last_cache_date())
+        import ipdb; ipdb.set_trace()
+        pass
 
 class Suite(object):
     """Test suite"""
