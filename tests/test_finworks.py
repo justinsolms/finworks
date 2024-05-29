@@ -158,14 +158,14 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
         """Test __aenter__ method."""
         async with self.api_class() as api:
             self.assertIsInstance(api.session, aiohttp.ClientSession)
-            self.assertIsInstance(api.conn, aiohttp.TCPConnector)
+            self.assertIsInstance(api.connector, aiohttp.TCPConnector)
 
     async def test___aexit__(self):
         """Test __aexit__ method."""
         async with self.api_class() as api:
             pass
         self.assertTrue(api.session.closed)
-        self.assertTrue(api.conn.closed)
+        self.assertTrue(api.connector.closed)
 
     @unittest.skip("Test is too slow for actual API data and isn't appropriate here.")
     async def run_then_assert(self, url, params, json_response_fixture=None):
