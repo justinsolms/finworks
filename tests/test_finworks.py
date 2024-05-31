@@ -11,13 +11,20 @@ distributed without the express permission of Justin Solms.
 
 """
 
-from abc import ABC
-import logging
+import datetime
 import unittest
-import pandas as pd
+from aiohttp import web
+import aiohttp
+import asyncio
+import threading
+import time
+import logging
+
+# Import the mock server
+from fundmanage3.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage3.finworks import APIClient, ClientInterface
+from fundmanage3.finworks import APIClient, Cache, ClientInterface, Data
 from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage3.finworks import PositionsTask, TransactionsTask
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
@@ -35,11 +42,49 @@ logger = logging.getLogger(__name__)
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
 # Set up test date
-TEST_DATE = MAIN_TEST_DATE
-
+TEST_DATE = datetime.datetime(2021, 8, 1)
+# TEST_DATE = MAIN_TEST_DATE
 
 # Use test data fixtures instead of the actual API data
-USE_TEST_DATA = True
+USE_MOCK_SERVER = True
+TEST_URL = "http://localhost:8080"
+
+
+class TestServer(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        logging.basicConfig(level=logging.DEBUG)
+        cls.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(cls.loop)
+        cls.app = create_server()
+        cls.runner = web.AppRunner(cls.app)
+        cls.loop.run_until_complete(cls.runner.setup())
+        cls.site = web.TCPSite(cls.runner, 'localhost', 8080)
+        cls.loop.run_until_complete(cls.site.start())
+
+        cls.server_thread = threading.Thread(target=cls.loop.run_forever)
+        cls.server_thread.start()
+        time.sleep(1)  # Give the server some time to start
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.loop.call_soon_threadsafe(cls.loop.stop)
+        cls.server_thread.join()
+        cls.loop.run_until_complete(cls.runner.cleanup())
+
+    def test_example(self):
+        # Example test
+        async def fetch():
+            async with aiohttp.ClientSession() as session:
+                async with session.get('http://localhost:8080/api/modelmanager/model-portfolios') as resp:
+                    self.assertEqual(resp.status, 200)
+                    data = await resp.json()
+                    # Asset the data are a list of dict.
+                    self.assertIsInstance(data, list)
+                    self.assertIsInstance(data[0], dict)
+
+        asyncio.run(fetch())
 
 
 class TestAPIClient(unittest.TestCase):
@@ -48,10 +93,20 @@ class TestAPIClient(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
+        # Start server
+        TestServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
-        self.api_client = APIClient()
+        if USE_MOCK_SERVER:
+            self.api_client = APIClient(TEST_URL)
+        else:
+            self.api_client = APIClient()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        # Stop server
+        TestServer.tearDownClass()
 
     def test_api(self):
         """Test the API class."""
@@ -62,39 +117,29 @@ class TestAPIClient(unittest.TestCase):
         self.api_client.add_task(InvestorsTask)
         self.api_client.add_task(PositionsTask, date=TEST_DATE)
         self.api_client.add_task(TransactionsTask, date=TEST_DATE)
-        # Fetch data
-        results_list = self.api_client.fetch()
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
         # Check results
-        self.assertIsInstance(results_list, list)
-        self.assertEqual(len(results_list), 5)
-        self.assertIsInstance(results_list[0], ModelsFrame)
-        self.assertIsInstance(results_list[1], InstrumentsFrame)
-        self.assertIsInstance(results_list[2], InvestorsFrame)
-        self.assertIsInstance(results_list[3], PositionsFrame)
-        self.assertIsInstance(results_list[4], TransactionsFrame)
-
-    def test_this(self):
-        # Add fetch tasks
-        self.api_client.add_task(ModelsTask)
-        self.api_client.add_task(InstrumentsTask)
-        self.api_client.add_task(InvestorsTask)
-        # Fetch data
-        results_list = self.api_client.fetch()
-        self.assertIsInstance(results_list[0], ModelsFrame)
-        self.assertIsInstance(results_list[1], InstrumentsFrame)
-        self.assertIsInstance(results_list[2], InvestorsFrame)
-        # Pop off basics data
-        models = results_list.pop(0)
-        instruments = results_list.pop(0)
-        investors = results_list.pop(0)
-        # Test this
-        models.merge(instruments)
-        investors.merge(models)
-        # Assert
-        self.assertIsInstance(models, ModelsFrame)
-        self.assertIsInstance(instruments, InstrumentsFrame)
-        import ipdb; ipdb.set_trace()
-        pass
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 5)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        self.assertNotIsInstance(tasks_list[1].response, Exception)
+        self.assertNotIsInstance(tasks_list[2].response, Exception)
+        self.assertNotIsInstance(tasks_list[3].response, Exception)
+        self.assertNotIsInstance(tasks_list[4].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], ModelsTask)
+        self.assertIsInstance(tasks_list[1], InstrumentsTask)
+        self.assertIsInstance(tasks_list[2], InvestorsTask)
+        self.assertIsInstance(tasks_list[3], PositionsTask)
+        self.assertIsInstance(tasks_list[4], TransactionsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, ModelsFrame)
+        self.assertIsInstance(tasks_list[1].response, InstrumentsFrame)
+        self.assertIsInstance(tasks_list[2].response, InvestorsFrame)
+        self.assertIsInstance(tasks_list[3].response, PositionsFrame)
+        self.assertIsInstance(tasks_list[4].response, TransactionsFrame)
 
 class TestClientInterface(unittest.TestCase):
     """Test suite for the ClientInterface class."""
@@ -102,10 +147,19 @@ class TestClientInterface(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
+        TestServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
-        self.client = ClientInterface()
+        if USE_MOCK_SERVER:
+            self.client = ClientInterface(TEST_URL)
+        else:
+            self.client = ClientInterface()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        TestServer.tearDownClass()
 
     def test_get_models(self):
         """Test the ClientInterface.get_models method."""
@@ -159,12 +213,35 @@ class TestClientInterface(unittest.TestCase):
         """Test the ClientInterface.get_data method."""
         # Test the get_data method
         data = self.client.get_data(date=TEST_DATE)
-        models, instruments, investors, positions, transactions = data
-        self.assertIsInstance(models, ModelsFrame)
-        self.assertIsInstance(instruments, InstrumentsFrame)
-        self.assertIsInstance(investors, InvestorsFrame)
-        self.assertIsInstance(positions, PositionsFrame)
-        self.assertIsInstance(transactions, TransactionsFrame)
+        self.assertIsInstance(data, Data)
+
+class TestCache(unittest.TestCase):
+    """Test suite for the Cache class."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        TestServer.setUpClass()
+
+    def setUp(self) -> None:
+        """Set up test method."""
+        if USE_MOCK_SERVER:
+            self.cache = Cache(test_url=TEST_URL)
+        else:
+            self.cache = Cache()
+        # Delete the cache
+        self.cache._delete()  # NOTE: Use with caution - back up the cache first
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        TestServer.tearDownClass()
+
+    def test_cache(self):
+        """Test the Cache class."""
+        # Update the cache
+        self.cache.update(increment=10)
+
 
 
 class Suite(object):
@@ -175,7 +252,7 @@ class Suite(object):
         suite = unittest.TestSuite()
 
         test_classes = [
-            TestAPI,
+            TestAPIClient,
             TestClientInterface,
         ]
 
