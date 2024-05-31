@@ -240,9 +240,8 @@ class TestCache(unittest.TestCase):
     def test_cache(self):
         """Test the Cache class."""
         # Update the cache
-        self.cache.update(increment=10)
-
-
+        self.cache.update(increment=1)
+        self.cache.update(increment=1)
 
 class Suite(object):
     """Test suite"""
