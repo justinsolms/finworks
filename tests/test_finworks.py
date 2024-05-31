@@ -22,7 +22,6 @@ from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage3.finworks import PositionsTask, TransactionsTask
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
-from fundmanage3.finworks import
 
 
 # Define test date ony in a single place
@@ -38,11 +37,12 @@ logger = logging.getLogger(__name__)
 # Set up test date
 TEST_DATE = MAIN_TEST_DATE
 
+
 # Use test data fixtures instead of the actual API data
 USE_TEST_DATA = True
 
 
-class TestAPI(unittest.TestCase):
+class TestAPIClient(unittest.TestCase):
     """Test suite for the ModelsTask class."""
 
     @classmethod
@@ -63,15 +63,38 @@ class TestAPI(unittest.TestCase):
         self.api_client.add_task(PositionsTask, date=TEST_DATE)
         self.api_client.add_task(TransactionsTask, date=TEST_DATE)
         # Fetch data
-        frames_list = self.api_client.fetch()
+        results_list = self.api_client.fetch()
         # Check results
-        self.assertIsInstance(frames_list, list)
-        self.assertEqual(len(frames_list), 5)
-        self.assertIsInstance(frames_list[0], ModelsFrame)
-        self.assertIsInstance(frames_list[1], InstrumentsFrame)
-        self.assertIsInstance(frames_list[2], InvestorsFrame)
-        self.assertIsInstance(frames_list[3], PositionsFrame)
-        self.assertIsInstance(frames_list[4], TransactionsFrame)
+        self.assertIsInstance(results_list, list)
+        self.assertEqual(len(results_list), 5)
+        self.assertIsInstance(results_list[0], ModelsFrame)
+        self.assertIsInstance(results_list[1], InstrumentsFrame)
+        self.assertIsInstance(results_list[2], InvestorsFrame)
+        self.assertIsInstance(results_list[3], PositionsFrame)
+        self.assertIsInstance(results_list[4], TransactionsFrame)
+
+    def test_this(self):
+        # Add fetch tasks
+        self.api_client.add_task(ModelsTask)
+        self.api_client.add_task(InstrumentsTask)
+        self.api_client.add_task(InvestorsTask)
+        # Fetch data
+        results_list = self.api_client.fetch()
+        self.assertIsInstance(results_list[0], ModelsFrame)
+        self.assertIsInstance(results_list[1], InstrumentsFrame)
+        self.assertIsInstance(results_list[2], InvestorsFrame)
+        # Pop off basics data
+        models = results_list.pop(0)
+        instruments = results_list.pop(0)
+        investors = results_list.pop(0)
+        # Test this
+        models.merge(instruments)
+        investors.merge(models)
+        # Assert
+        self.assertIsInstance(models, ModelsFrame)
+        self.assertIsInstance(instruments, InstrumentsFrame)
+        import ipdb; ipdb.set_trace()
+        pass
 
 class TestClientInterface(unittest.TestCase):
     """Test suite for the ClientInterface class."""
@@ -124,10 +147,10 @@ class TestClientInterface(unittest.TestCase):
         self.assertIsInstance(instruments, InstrumentsFrame)
         self.assertIsInstance(investors, InvestorsFrame)
 
-    def get_get_time_series(self):
+    def get_get_time_series_data(self):
         """Test the ClientInterface.get_time_series method."""
         # Test the get_time_series method
-        time_series_data = self.client.get_time_series()
+        time_series_data = self.client.get_time_series(date=TEST_DATE)
         positions, transactions = time_series_data
         self.assertIsInstance(positions, PositionsFrame)
         self.assertIsInstance(transactions, TransactionsFrame)
@@ -135,7 +158,7 @@ class TestClientInterface(unittest.TestCase):
     def test_get_data(self):
         """Test the ClientInterface.get_data method."""
         # Test the get_data method
-        data = self.client.get_data()
+        data = self.client.get_data(date=TEST_DATE)
         models, instruments, investors, positions, transactions = data
         self.assertIsInstance(models, ModelsFrame)
         self.assertIsInstance(instruments, InstrumentsFrame)
