@@ -241,12 +241,25 @@ class TestCache(unittest.TestCase):
         """Tear down test class."""
         TestServer.tearDownClass()
 
-    @unittest.skip("Skip this test")
-    def test_cache(self):
-        """Test the Cache class."""
-        # Update the cache
+    def test_cache_increment(self):
+        """Test the Cache class increment option."""
+        # Update the cache over 10 days form start date
         self.cache.update(increment=1)
-        self.cache.update(increment=1)
+        self.cache.update(increment=2)
+        self.cache.update(increment=3)
+        self.cache.update(increment=4)
+        # Read the cache form start date to end date
+        data_cache = self.cache.get_cache_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        data_api = self.cache.get_api_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        Data.assert_equal(data_cache, data_api)
+
+    def test_cache_batch(self):
+        """Test the Cache class batch update option."""
+        self.cache.batch_update(batch_size=5, batches=2)
+        # Read the cache form start date to end date
+        data_cache = self.cache.get_cache_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        data_api = self.cache.get_api_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        Data.assert_equal(data_cache, data_api)
 
 class Suite(object):
     """Test suite"""
