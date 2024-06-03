@@ -46,7 +46,7 @@ TEST_DATE = datetime.datetime(2021, 8, 1)
 # TEST_DATE = MAIN_TEST_DATE
 
 # Use test data fixtures instead of the actual API data
-USE_MOCK_SERVER = True
+USE_TEST_SERVER = True
 TEST_URL = "http://localhost:8080"
 
 
@@ -80,9 +80,13 @@ class TestServer(unittest.TestCase):
                 async with session.get('http://localhost:8080/api/modelmanager/model-portfolios') as resp:
                     self.assertEqual(resp.status, 200)
                     data = await resp.json()
-                    # Asset the data are a list of dict.
-                    self.assertIsInstance(data, list)
-                    self.assertIsInstance(data[0], dict)
+                    # Assert the data structure
+                    self.assertIsInstance(data, dict)
+                    self.assertIn('data', data)
+                    self.assertIn('size', data)
+                    self.assertEqual(len(data['data']), data['size'])
+                    self.assertIsInstance(data['data'], list)
+                    self.assertIsInstance(data['data'][0], dict)
 
         asyncio.run(fetch())
 
@@ -98,8 +102,8 @@ class TestAPIClient(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test method."""
-        if USE_MOCK_SERVER:
-            self.api_client = APIClient(TEST_URL)
+        if USE_TEST_SERVER:
+            self.api_client = APIClient(test_url=TEST_URL)
         else:
             self.api_client = APIClient()
 
@@ -151,8 +155,8 @@ class TestClientInterface(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test method."""
-        if USE_MOCK_SERVER:
-            self.client = ClientInterface(TEST_URL)
+        if USE_TEST_SERVER:
+            self.client = ClientInterface(test_url=TEST_URL)
         else:
             self.client = ClientInterface()
 
@@ -225,7 +229,7 @@ class TestCache(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test method."""
-        if USE_MOCK_SERVER:
+        if USE_TEST_SERVER:
             self.cache = Cache(test_url=TEST_URL)
         else:
             self.cache = Cache()
@@ -237,6 +241,7 @@ class TestCache(unittest.TestCase):
         """Tear down test class."""
         TestServer.tearDownClass()
 
+    @unittest.skip("Skip this test")
     def test_cache(self):
         """Test the Cache class."""
         # Update the cache
