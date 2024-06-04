@@ -31,11 +31,9 @@ from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
 
 
-# Define test date ony in a single place
-from fundmanage3.finworks import TEST_DATE as MAIN_TEST_DATE
-
 # Get module-named logger.
 logger = logging.getLogger(__name__)
+
 
 # import warnings
 # warnings.filterwarnings(
