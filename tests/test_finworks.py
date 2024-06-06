@@ -29,6 +29,7 @@ from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage3.finworks import PositionsTask, TransactionsTask
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
+from fundmanage3.finworks import START_DATE
 
 
 # Get module-named logger.
@@ -247,16 +248,16 @@ class TestCache(unittest.TestCase):
         self.cache.update(increment=3)
         self.cache.update(increment=4)
         # Read the cache form start date to end date
-        data_cache = self.cache.get_cache_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
-        data_api = self.cache.get_api_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
+        data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
 
     def test_cache_batch(self):
         """Test the Cache class batch update option."""
         self.cache.batch_update(batch_size=5, batches=2)
         # Read the cache form start date to end date
-        data_cache = self.cache.get_cache_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
-        data_api = self.cache.get_api_data(from_date=Cache.START_DATE, to_date=self.cache.get_last_cache_date())
+        data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
+        data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
 
 class Suite(object):
