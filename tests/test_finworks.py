@@ -243,9 +243,9 @@ class TestCache(unittest.TestCase):
     def test_cache_increment(self):
         """Test the Cache class increment option."""
         # Update the cache over 10 days form start date
-        self.cache.update(increment=2, roll_back=0)
-        self.cache.update(increment=2, roll_back=0)
-        # self.cache.update(increment=2, roll_back=0)
+        self.cache.update(increment=5, roll_back=0)
+        self.cache.update(increment=5, roll_back=0)
+        self.cache.update(increment=5, roll_back=0)
         # self.cache.update(increment=1)
         # self.cache.update(increment=2)
         # self.cache.update(increment=3)
