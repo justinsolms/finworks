@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
 # Set up test date
-TEST_DATE = datetime.datetime(2021, 8, 1)
+TEST_DATE = datetime.date(2021, 8, 1)
 # TEST_DATE = MAIN_TEST_DATE
 
 # Use test data fixtures instead of the actual API data
@@ -243,17 +243,27 @@ class TestCache(unittest.TestCase):
     def test_cache_increment(self):
         """Test the Cache class increment option."""
         # Update the cache over 10 days form start date
-        self.cache.update(increment=5, roll_back=0)
-        self.cache.update(increment=5, roll_back=0)
-        self.cache.update(increment=5, roll_back=0)
-        # self.cache.update(increment=1)
-        # self.cache.update(increment=2)
-        # self.cache.update(increment=3)
-        # self.cache.update(increment=4)
+        self.cache.update(increment=1)
+        self.cache.update(increment=2)
+        self.cache.update(increment=3)
+        self.cache.update(increment=4)
         # Read the cache form start date to end date
-        # data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
-        # data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
-        # Data.assert_equal(data_cache, data_api)
+        data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
+        data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
+        Data.assert_equal(data_cache, data_api)
+
+    def test_cache_increment_no_rollback(self):
+        """Test the Cache class increment option with no roll back to test if
+        there is data loss on cache write."""
+        # Update the cache over 10 days form start date
+        self.cache.update(increment=1, roll_back=0)
+        self.cache.update(increment=2, roll_back=0)
+        self.cache.update(increment=3, roll_back=0)
+        self.cache.update(increment=4, roll_back=0)
+        # Read the cache form start date to end date
+        data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
+        data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
+        Data.assert_equal(data_cache, data_api)
 
     def test_cache_batch(self):
         """Test the Cache class batch update option."""
