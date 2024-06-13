@@ -219,7 +219,12 @@ class TestClientInterface(unittest.TestCase):
         self.assertIsInstance(data, Data)
 
 class TestCache(unittest.TestCase):
-    """Test suite for the Cache class."""
+    """Test suite for the Cache class.
+
+    Warning
+    -------
+    This test suite will delete the cache if it exists. Use with caution.
+    """
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -272,6 +277,59 @@ class TestCache(unittest.TestCase):
         data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
+
+
+class TestCacheRepair(unittest.TestCase):
+    """Test suite for the Cache class.
+
+    Note
+    ----
+    This can only be used on a production cache that has files with missing
+    positions and transactions dates.
+
+    (base) justin@sundesk:~$ ncal -W7 -bwM 4 2023
+        April 2023
+     w| Mo Tu We Th Fr Sa Su
+    13|                 1  2
+    14|  3  4  5  6  7  8  9
+    15| 10 11 12 13 14 15 16
+    16| 17 18 19 20 21 22 23
+    17| 24 25 26 27 28 29 30
+
+    (base) justin@sundesk:~$ ncal -W7 -bwM 5 2023
+            May 2023
+     w| Mo Tu We Th Fr Sa Su
+    18|  1  2  3  4  5  6  7
+    19|  8  9 10 11 12 13 14
+    20| 15 16 17 18 19 20 21
+    21| 22 23 24 25 26 27 28
+    22| 29 30 31
+
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        TestServer.setUpClass()
+
+    def setUp(self) -> None:
+        """Set up test method."""
+        if USE_TEST_SERVER:
+            self.cache = Cache(test_url=TEST_URL)
+        else:
+            self.cache = Cache()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        TestServer.tearDownClass()
+
+    def test_cache_repair(self):
+        """Test the Cache class increment option."""
+        start_date = datetime.date(2023, 4, 24)
+        end_date = datetime.date(2023, 5, 7)
+        self.cache.repair(start_date, end_date)
+
 
 class Suite(object):
     """Test suite"""
