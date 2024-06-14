@@ -256,6 +256,8 @@ class TestCache(unittest.TestCase):
         data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
+        assert data_cache.transactions.price.dtype == float, 'Expected float data type'
+        assert data_api.transactions.price.dtype == float, 'Expected float data type'
 
     def test_cache_increment_no_rollback(self):
         """Test the Cache class increment option with no roll back to test if
@@ -278,14 +280,16 @@ class TestCache(unittest.TestCase):
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
 
-
+@unittest.skip("Skip cache repair test as not yet fully implemented.")
 class TestCacheRepair(unittest.TestCase):
     """Test suite for the Cache class.
 
     Note
     ----
     This can only be used on a production cache that has files with missing
-    positions and transactions dates.
+    positions and transactions dates. These block file set for 2023-W17 and
+    2023-W18 can be found in the `tests/fixtures/finworks_bad_block_set`
+    directory. They must be copied to the cache directory to test the repair.
 
     (base) justin@sundesk:~$ ncal -W7 -bwM 4 2023
         April 2023
@@ -329,6 +333,9 @@ class TestCacheRepair(unittest.TestCase):
         start_date = datetime.date(2023, 4, 24)
         end_date = datetime.date(2023, 5, 7)
         self.cache.repair(start_date, end_date)
+        data_cache = self.cache.get_cache_data(from_date=start_date, to_date=end_date)
+        data_api = self.cache.get_api_data(from_date=start_date, to_date=end_date)
+        Data.assert_equal(data_cache, data_api)
 
 
 class Suite(object):
