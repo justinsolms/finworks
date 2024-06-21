@@ -19,6 +19,7 @@ import asyncio
 import threading
 import time
 import logging
+import ipdb
 
 # Import the mock server
 from fundmanage3.finworks_mock_server import create_server
@@ -29,7 +30,11 @@ from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage3.finworks import PositionsTask, TransactionsTask
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from fundmanage3.finworks import PositionsFrame, TransactionsFrame
+from fundmanage3.finworks import FundProvider
 from fundmanage3.finworks import START_DATE
+
+from asset_base.manager import Manager
+from fundmanage3.funds import FundsList
 
 
 # Get module-named logger.
@@ -336,6 +341,35 @@ class TestCacheRepair(unittest.TestCase):
         data_cache = self.cache.get_cache_data(from_date=start_date, to_date=end_date)
         data_api = self.cache.get_api_data(from_date=start_date, to_date=end_date)
         Data.assert_equal(data_cache, data_api)
+
+
+class TestFundProvider(unittest.TestCase):
+    """Test suite for the FundProvider class."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.asset_base = Manager()
+
+    def setUp(self) -> None:
+        """Set up test method."""
+        self.today = datetime.date(2024, 4, 30)
+        self.provider = FundProvider(self.asset_base, last_date=self.today)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        cls.asset_base.close()
+
+    def test___init__(self):
+        """Test the FundProvider class."""
+        self.assertIsInstance(self.provider, FundProvider)
+
+    def test_get_funds_list(self):
+        """Test the FundProvider.get_funds_list method."""
+        model_ticker_list = ["IDXDISGROA"]
+        funds_list = self.provider.get_funds_list(model_ticker_list=model_ticker_list)
+        self.assertIsInstance(funds_list, FundsList)
 
 
 class Suite(object):
