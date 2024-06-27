@@ -22,6 +22,7 @@ import logging
 import ipdb
 
 # Import the mock server
+from fundmanage3 import get_data_path
 from fundmanage3.finworks_mock_server import create_server
 
 # Classes to be tested
@@ -231,6 +232,9 @@ class TestCache(unittest.TestCase):
     This test suite will delete the cache if it exists. Use with caution.
     """
 
+    # Compare tis to CACHE_PATH in finworks.py
+    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
+
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
@@ -239,7 +243,7 @@ class TestCache(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test method."""
         if USE_TEST_SERVER:
-            self.cache = Cache(test_url=TEST_URL)
+            self.cache = Cache(alt_path=self.ALT_CACHE_PATH, test_url=TEST_URL)
         else:
             self.cache = Cache()
         # Delete the cache
@@ -285,7 +289,7 @@ class TestCache(unittest.TestCase):
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
 
-@unittest.skip("Skip cache repair test as not yet fully implemented.")
+@unittest.skip("Skip test as the repair methods are not yet fully implemented.")
 class TestCacheRepair(unittest.TestCase):
     """Test suite for the Cache class.
 
@@ -316,6 +320,9 @@ class TestCacheRepair(unittest.TestCase):
 
     """
 
+    # Compare tis to CACHE_PATH in finworks.py
+    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
+
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
@@ -324,7 +331,7 @@ class TestCacheRepair(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test method."""
         if USE_TEST_SERVER:
-            self.cache = Cache(test_url=TEST_URL)
+            self.cache = Cache(alt_path=self.ALT_CACHE_PATH, test_url=TEST_URL)
         else:
             self.cache = Cache()
 
@@ -343,6 +350,7 @@ class TestCacheRepair(unittest.TestCase):
         Data.assert_equal(data_cache, data_api)
 
 
+@unittest.skip("Tests not yet fully implemented.")
 class TestFundProvider(unittest.TestCase):
     """Test suite for the FundProvider class."""
 
@@ -380,8 +388,10 @@ class Suite(object):
         suite = unittest.TestSuite()
 
         test_classes = [
+            TestServer,
             TestAPIClient,
             TestClientInterface,
+            TestCache,
         ]
 
         suites_list = list()
