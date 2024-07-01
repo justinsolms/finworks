@@ -281,6 +281,18 @@ class TestCache(unittest.TestCase):
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
 
+    def test_cache_increment_and_rollback(self):
+        """Test the Cache class increment option with no roll back to test if
+        there is data loss on cache write."""
+        # Update the cache over 10 days form start date
+        self.cache.update(increment=1, roll_back=0)
+        self.cache.update(increment=1, roll_back=0)
+        self.cache.update(roll_back=4)
+        # Read the cache form start date to end date
+        data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
+        data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
+        Data.assert_equal(data_cache, data_api)
+
     def test_cache_batch(self):
         """Test the Cache class batch update option."""
         self.cache.batch_update(batch_size=5, batches=2)
