@@ -23,20 +23,20 @@ import logging
 import ipdb
 
 # Import the mock server
-from fundmanage3 import get_data_path
-from fundmanage3.finworks_mock_server import create_server
+from fundmanage import get_data_path
+from fundmanage.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage3.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
-from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
-from fundmanage3.finworks import PositionsTask, TransactionsTask
-from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
-from fundmanage3.finworks import PositionsFrame, TransactionsFrame
-from fundmanage3.finworks import FundProvider
-from fundmanage3.finworks import START_DATE
+from fundmanage.finworks import APIClient, Cache, ClientInterface, Data
+from fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
+from fundmanage.finworks import PositionsTask, TransactionsTask
+from fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from fundmanage.finworks import PositionsFrame, TransactionsFrame
+from fundmanage.finworks import FundProvider
+from fundmanage.finworks import START_DATE
 
 from asset_base.manager import Manager
-from fundmanage3.funds import FundsList
+from fundmanage.funds import FundsList
 
 
 # Get module-named logger.
