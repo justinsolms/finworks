@@ -27,7 +27,7 @@ from fundmanage3 import get_data_path
 from fundmanage3.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage3.finworks import APIClient, Cache, ClientInterface, Data
+from fundmanage3.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
 from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage3.finworks import PositionsTask, TransactionsTask
 from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
@@ -88,8 +88,16 @@ class TestAuthentication(unittest.TestCase):
                     try:
                         async with session.get(url, headers=headers, ssl=ssl_context) as response:
                             try:
-                                content = await response.text()
-                                return content
+                                json_records = await response.json()
+                                return json_records
+                            except aiohttp.ContentTypeError as ex:
+                                # We got a response but it was not JSON
+                                text = await response.text()
+                                # Set the exception as the response
+                                raise FinworksAPIError(
+                                    f"{ex.message}, url={ex.request_info.url}\n"
+                                    f"Text received was:\n"
+                                    f"{text}")
                             except Exception as e:
                                 print(f"Error reading response text: {e}")
                     except ssl.SSLCertVerificationError as e:
@@ -110,7 +118,12 @@ class TestAuthentication(unittest.TestCase):
         async def main():
             content = await fetch(self.url, self.cert_path, self.key_path, self.token)
             if content:
-                print(content)
+                self.assertEqual(content['size'], len(content['data']))
+                item = content['data'][0]
+                # Test dict keys
+                self.assertTrue('Model portfolio id' in item)
+                self.assertTrue('Splits' in item)
+                # We can add more dict key tests here for greater certainty
 
         # Commented out to prevent execution in this environment
         asyncio.run(main())
@@ -177,6 +190,23 @@ class TestAPIClient(unittest.TestCase):
     def tearDownClass(cls) -> None:
         # Stop server
         TestServer.tearDownClass()
+
+    def test_single(self):
+        """Test the API class."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(ModelsTask)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], ModelsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, ModelsFrame)
 
     def test_api(self):
         """Test the API class."""
