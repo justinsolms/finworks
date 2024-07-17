@@ -21,9 +21,9 @@ import threading
 import time
 import logging
 import ipdb
+import pkg_resources
 
 # Import the mock server
-from fundmanage import get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
@@ -62,8 +62,8 @@ class TestAuthentication(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        cls.cert_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.crt")
-        cls.key_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.key")
+        cls.cert_path = pkg_resources.resource_filename("data", "finworks/certificates/secure.aospartner.com/cert.crt")
+        cls.key_path = pkg_resources.resource_filename("data", "finworks/certificates/secure.aospartner.com/cert.key")
         cls.token = "QyT7oTnIvmiq5swQ"
         cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
 
@@ -129,7 +129,7 @@ class TestAuthentication(unittest.TestCase):
         asyncio.run(main())
 
 
-class TestServer(unittest.TestCase):
+class TestMockServer(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -177,7 +177,7 @@ class TestAPIClient(unittest.TestCase):
     def setUpClass(cls) -> None:
         """Set up test class."""
         # Start server
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -189,7 +189,7 @@ class TestAPIClient(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         # Stop server
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_single(self):
         """Test the API class."""
@@ -247,7 +247,7 @@ class TestClientInterface(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -259,7 +259,7 @@ class TestClientInterface(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_get_models(self):
         """Test the ClientInterface.get_models method."""
@@ -324,12 +324,12 @@ class TestCache(unittest.TestCase):
     """
 
     # Compare tis to CACHE_PATH in finworks.py
-    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
+    ALT_CACHE_PATH = pkg_resources.resource_filename("data", "finworks/unittest_cache")
 
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -343,7 +343,7 @@ class TestCache(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_cache_increment(self):
         """Test the Cache class increment option."""
@@ -424,12 +424,12 @@ class TestCacheRepair(unittest.TestCase):
     """
 
     # Compare tis to CACHE_PATH in finworks.py
-    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
+    ALT_CACHE_PATH = pkg_resources.resource_filename("data", "finworks/unittest_cache")
 
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -441,7 +441,7 @@ class TestCacheRepair(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_cache_repair(self):
         """Test the Cache class increment option."""
@@ -491,7 +491,8 @@ class Suite(object):
         suite = unittest.TestSuite()
 
         test_classes = [
-            TestServer,
+            TestAuthentication,
+            TestMockServer,
             TestAPIClient,
             TestClientInterface,
             TestCache,
