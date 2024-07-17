@@ -24,10 +24,10 @@ import ipdb
 
 # Import the mock server
 from fundmanage import get_data_path
-from fundmanage.finworks_mock_server import create_server
+from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage.finworks import APIClient, Cache, ClientInterface, Data
+from fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
 from fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from fundmanage.finworks import PositionsTask, TransactionsTask
 from fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
