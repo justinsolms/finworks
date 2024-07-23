@@ -4,7 +4,6 @@ from aiohttp import web
 import json
 import os
 import logging
-import ipdb
 
 from src.fundmanage import get_tests_path
 
