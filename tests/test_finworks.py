@@ -20,10 +20,9 @@ import asyncio
 import threading
 import time
 import logging
-import ipdb
-import pkg_resources
 
 # Import the mock server
+from src.fundmanage import get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
@@ -62,8 +61,8 @@ class TestAuthentication(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        cls.cert_path = pkg_resources.resource_filename("data", "finworks/certificates/secure.aospartner.com/cert.crt")
-        cls.key_path = pkg_resources.resource_filename("data", "finworks/certificates/secure.aospartner.com/cert.key")
+        cls.cert_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.crt")
+        cls.key_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.key")
         cls.token = "QyT7oTnIvmiq5swQ"
         cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
 
@@ -324,7 +323,7 @@ class TestCache(unittest.TestCase):
     """
 
     # Compare tis to CACHE_PATH in finworks.py
-    ALT_CACHE_PATH = pkg_resources.resource_filename("data", "finworks/unittest_cache")
+    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -424,7 +423,7 @@ class TestCacheRepair(unittest.TestCase):
     """
 
     # Compare tis to CACHE_PATH in finworks.py
-    ALT_CACHE_PATH = pkg_resources.resource_filename("data", "finworks/unittest_cache")
+    ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
 
     @classmethod
     def setUpClass(cls) -> None:

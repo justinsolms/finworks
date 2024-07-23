@@ -5,13 +5,14 @@ import json
 import os
 import logging
 import ipdb
-import pkg_resources
+
+from src.fundmanage import get_tests_path
 
 # Get module-named logger.
 logger = logging.getLogger(__name__)
 
 # Path to test JSON test fixture files
-TEST_FIXTURES_PATH = pkg_resources.resource_filename('tests', 'fixtures/finworks')
+TEST_FIXTURES_PATH = get_tests_path('fixtures/finworks')
 
 async def load_json(file_path):
     if not os.path.exists(file_path):

@@ -18,13 +18,13 @@ import aiohttp.client_exceptions
 import click
 import pandas as pd
 from pandas import DataFrame
-import pkg_resources
 from tqdm import tqdm
 from asset_base.asset import Listed
 from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
+from fundmanage import get_data_path
 from fundmanage.funds import FundsList
 from abc import ABC, abstractmethod
 
@@ -180,7 +180,7 @@ class Task():
             now = datetime.datetime.now()
             date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
             # Dump the exceptions to a file
-            path = pkg_resources.resource_filename("data", "finworks/exceptions")
+            path = get_data_path("finworks/exceptions")
             # If path does not exist then create it
             if not os.path.isdir(path):
                 os.makedirs(path)
@@ -565,7 +565,7 @@ class APIClient(object):
     else:
         raise Exception("Invalid DOMAIN selection.")
 
-    CERTIFICATE_ROOT_PATH = pkg_resources.resource_filename("data", "finworks/certificates")
+    CERTIFICATE_ROOT_PATH = get_data_path("finworks/certificates")
     KEY_PATH = os.path.join(CERTIFICATE_ROOT_PATH, DOMAIN)
 
     # Connector settings
@@ -2466,9 +2466,9 @@ class Cache(object):
 
     # Select cache path based on API domain
     if APIClient.ENVIRONMENT == "test":
-        CACHE_PATH = pkg_resources.resource_filename("data", "finworks/test_cache")
+        CACHE_PATH = get_data_path("finworks/test_cache")
     elif APIClient.ENVIRONMENT == "production":
-        CACHE_PATH = pkg_resources.resource_filename("data", "finworks/live_cache")
+        CACHE_PATH = get_data_path("finworks/live_cache")
 
     TIME_SERIES_FILE = "time-series-data"
     BASICS_DATA_FILE = "basics-data"
