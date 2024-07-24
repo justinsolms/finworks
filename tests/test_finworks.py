@@ -26,16 +26,16 @@ from src.fundmanage import get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
-from fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
-from fundmanage.finworks import PositionsTask, TransactionsTask
-from fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
-from fundmanage.finworks import PositionsFrame, TransactionsFrame
-from fundmanage.finworks import FundProvider
-from fundmanage.finworks import START_DATE
+from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
+from src.fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
+from src.fundmanage.finworks import PositionsTask, TransactionsTask
+from src.fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from src.fundmanage.finworks import PositionsFrame, TransactionsFrame
+from src.fundmanage.finworks import FundProvider
+from src.fundmanage.finworks import START_DATE
 
 from asset_base.manager import Manager
-from fundmanage.funds import FundsList
+from src.fundmanage.funds import FundsList
 
 
 # Get module-named logger.

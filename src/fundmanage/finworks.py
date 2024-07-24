@@ -25,7 +25,7 @@ from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
 from fundmanage import get_data_path
-from fundmanage.funds import FundsList
+from .funds import FundsList
 from abc import ABC, abstractmethod
 
 from pandas.testing import assert_frame_equal
