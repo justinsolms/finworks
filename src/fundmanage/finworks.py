@@ -597,7 +597,7 @@ class APIClient(object):
         key = os.path.join(self.KEY_PATH, self.KEY)
         crt = os.path.join(self.KEY_PATH, self.CRT)
         self.headers = { "Authorization: Bearer": self.TOKEN, "Content-Type": "application/json" }
-        self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         self.ssl_context.load_cert_chain(certfile=crt, keyfile=key)
 
     def __repr__(self) -> str:

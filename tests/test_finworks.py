@@ -12,11 +12,11 @@ distributed without the express permission of Justin Solms.
 """
 
 import datetime
-import ssl
 import unittest
 from aiohttp import web
 import aiohttp
 import asyncio
+import ssl
 import threading
 import time
 import logging
@@ -73,8 +73,10 @@ class TestAuthentication(unittest.TestCase):
     def test_authentication(self):
         """Test the Finworks certificates and keys."""
         async def fetch(url, cert_path, key_path, token):
-            # Create SSL context and load cert and key
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            # Create an SSL context for use in a client connecting to a server
+            # that uses a certificate file and key file with token and retrieves
+            # JSON data.
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
 
             headers = {
@@ -82,37 +84,19 @@ class TestAuthentication(unittest.TestCase):
                 "Content-Type": "application/json"
             }
 
-            try:
-                async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, ssl=ssl_context) as response:
                     try:
-                        async with session.get(url, headers=headers, ssl=ssl_context) as response:
-                            try:
-                                json_records = await response.json()
-                                return json_records
-                            except aiohttp.ContentTypeError as ex:
-                                # We got a response but it was not JSON
-                                text = await response.text()
-                                # Set the exception as the response
-                                raise FinworksAPIError(
-                                    f"{ex.message}, url={ex.request_info.url}\n"
-                                    f"Text received was:\n"
-                                    f"{text}")
-                            except Exception as e:
-                                print(f"Error reading response text: {e}")
-                    except ssl.SSLCertVerificationError as e:
-                        print(f"SSL certificate verification error occurred: {e}")
-                    except aiohttp.ClientConnectorCertificateError as e:
-                        print(f"Client connector certificate error occurred: {e}")
-                    except ssl.SSLError as e:
-                        print(f"SSL error occurred: {e}")
-                    except aiohttp.ClientError as e:
-                        print(f"Client error occurred: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred during the request: {e}")
-            except aiohttp.ClientError as e:
-                print(f"Client session error occurred: {e}")
-            except Exception as e:
-                print(f"An unexpected error occurred during session creation: {e}")
+                        json_records = await response.json()
+                        return json_records
+                    except aiohttp.ContentTypeError as ex:
+                        # We got a response but it was not JSON
+                        text = await response.text()
+                        # Set the exception as the response
+                        raise FinworksAPIError(
+                            f"{ex.message}, url={ex.request_info.url}\n"
+                            f"Text received was:\n"
+                            f"{text}")
 
         async def main():
             content = await fetch(self.url, self.cert_path, self.key_path, self.token)
