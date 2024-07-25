@@ -22,7 +22,7 @@ import time
 import logging
 
 # Import the mock server
-from src.fundmanage import get_data_path
+from src.fundmanage import get_certificates_path, get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
@@ -61,8 +61,8 @@ class TestAuthentication(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        cls.cert_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.crt")
-        cls.key_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.key")
+        cls.cert_path = get_certificates_path("secure.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("secure.aospartner.com/cert.key")
         cls.token = "QyT7oTnIvmiq5swQ"
         cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
 
@@ -174,8 +174,9 @@ class TestAPIClient(unittest.TestCase):
         # Stop server
         TestMockServer.tearDownClass()
 
-    def test_single(self):
-        """Test the API class."""
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_model(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
         self.assertIsInstance(self.api_client, APIClient)
         # Add fetch tasks
         self.api_client.add_task(ModelsTask)
@@ -190,6 +191,78 @@ class TestAPIClient(unittest.TestCase):
         self.assertIsInstance(tasks_list[0], ModelsTask)
         # Check tasks responses are the expected response types
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_instruments(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(InstrumentsTask)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], InstrumentsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, InstrumentsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_investors(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(InvestorsTask)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], InvestorsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, InvestorsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_positions(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(PositionsTask, date=TEST_DATE)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], PositionsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, PositionsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_transactions(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(TransactionsTask, date=TEST_DATE)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], TransactionsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, TransactionsFrame)
 
     def test_api(self):
         """Test the API class."""

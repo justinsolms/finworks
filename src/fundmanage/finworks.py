@@ -24,7 +24,7 @@ from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
-from fundmanage import get_data_path
+from fundmanage import get_certificates_path, get_data_path
 from .funds import FundsList
 from abc import ABC, abstractmethod
 
@@ -117,7 +117,7 @@ class Task():
         # Set as an exception indicating that the data is not yet fetched. Will
         # be set as exception upon failures or or BaseFrame subclasses of
         # `table_class` argument upon success.
-        self.response = Exception("No API response yet.")
+        self.response = Exception("There were not any valid API response yet.")
         # None responses indicating that the data is not yet fetched or was not
         # successfully fetched
         self.exception_records = None
@@ -360,8 +360,12 @@ class InvestorsTask(Task):
         item.pop("Policy number")
         item.pop("Description")
         item.pop("Product")
-        item.pop("Investor account id") # NOTE: Was contract_id. This will be removed 29 Feb 2024.
-        item.pop("Account number") # NOTE: Was contract_number. This will be removed 29 Feb 2024.
+        if "Investor account id" in item:
+            # NOTE: Was contract_number. This was to be removed some day
+            item.pop("Investor account id")
+        if "Account number" in item:
+            # NOTE: Was contract_number. This was to be removed some day
+            item.pop("Account number")
         # Rename fields
         item["client_account_id"] = item.pop("Client account id") # NOTE: This is not in the Finworks specification
         item["contract_id"] = item.pop("Contract id")  # NOTE: Was old UUID
@@ -399,7 +403,9 @@ class PositionsTask(Task):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
         # Pop off unwanted fields.
-        item.pop("Investor account id") # NOTE: Was contract_id. This will be removed 29 Feb 2024.
+        if "Investor account id" in item:
+            # NOTE: Was contract_number. This was to be removed some day
+            item.pop("Investor account id")
         item.pop("Market Value in System Currency")
         item.pop("Instrument account number")
         # Renames
@@ -470,7 +476,9 @@ class TransactionsTask(Task):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
         # Pop off unwanted fields.
-        item.pop("Investor account id") # NOTE: Was contract_id. This will be removed 29 Feb 2024.
+        if "Investor account id" in item:
+            # NOTE: Was contract_number. This was to be removed some day
+            item.pop("Investor account id")
         item.pop("Instrument account number")
         # Renames
         item["date"] = item.pop("Date")
@@ -565,9 +573,6 @@ class APIClient(object):
     else:
         raise Exception("Invalid DOMAIN selection.")
 
-    CERTIFICATE_ROOT_PATH = get_data_path("finworks/certificates")
-    KEY_PATH = os.path.join(CERTIFICATE_ROOT_PATH, DOMAIN)
-
     # Connector settings
     CONNECTION_LIMIT = 4 # Maximum number of connections
     CONNECTION_LIMIT_PER_HOST = 2  # Maximum number of connections per host
@@ -591,11 +596,9 @@ class APIClient(object):
 
         self.tasks_list = []
 
-        # Set up SSL context with certificate verification
-        if not os.path.isdir(self.KEY_PATH):
-            raise Exception("SSL certificates path not found.")
-        key = os.path.join(self.KEY_PATH, self.KEY)
-        crt = os.path.join(self.KEY_PATH, self.CRT)
+        # Set up SSL context with server domain certificate verification
+        key = get_certificates_path(os.path.join(self.DOMAIN, self.KEY))
+        crt = get_certificates_path(os.path.join(self.DOMAIN, self.CRT))
         self.headers = { "Authorization: Bearer": self.TOKEN, "Content-Type": "application/json" }
         self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         self.ssl_context.load_cert_chain(certfile=crt, keyfile=key)
@@ -2486,10 +2489,10 @@ class Cache(object):
         path = os.path.dirname(__loader__.path)  # This module's file path
         if alt_path is not None:
             # Use alternative specified path
-            path = os.path.join(path, alt_path)
+            path = alt_path
         else:
             # Use default path
-            path = os.path.join(path, self.CACHE_PATH)
+            path = self.CACHE_PATH
         self._path = path
         # Create the path folder if it does not already exist
         self._create_cache_folder(self._path)
