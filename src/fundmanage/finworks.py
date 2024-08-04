@@ -669,12 +669,11 @@ class APIClient(object):
             incomplete_tasks_list = [task for task in self.tasks_list if not task.is_completed]
             # Check retry status against incomplete tasks
             if incomplete_tasks_list:
-                if retry != self.RETRY_LIST[0]:
-                    # Skip warnings for the first try
+                if retry != self.RETRY_LIST[0]:  # Skip warnings for the first try
                     for task in incomplete_tasks_list:
                         task_name = task.__class__.__name__
                         logger.warning(f"Failed {task_name}, {task.response}, url={task.full_url}")
-                if retry == self.RETRY_LIST[-1]:
+                elif retry == self.RETRY_LIST[-1]:  # Last retry - we give up here
                     logger.critical("There are incomplete tasks after too many retires. Here follow full exceptions logs:")
                     for task in incomplete_tasks_list:
                         # The response contains the exception
@@ -683,6 +682,9 @@ class APIClient(object):
                         logger.error(f"Failed {task_name} caused by the exception below:\n%s", "".join(traceback.format_exception(None, ex, ex.__traceback__)))
                     # Give up on the last retry
                     raise FinworksAPIError("There are incomplete tasks after too many retires - aborting.")
+                else:
+                    # Log an explicit retry warning
+                    logger.warning(f"Retrying {len(incomplete_tasks_list)} tasks.")
             else:
                 break  # No incomplete tasks
 
