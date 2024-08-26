@@ -24,7 +24,7 @@ from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
-from fundmanage import get_certificates_path, get_data_path
+from fundmanage import get_certificates_path, get_data_path, get_output_path
 from .funds import FundsList
 from abc import ABC, abstractmethod
 
@@ -1554,7 +1554,10 @@ class CollectJSONResponses(object):
             logger.info("Got %s model(s).", len(models))
         if time_series:
             logger.info("Got %s position(s).", len(positions))
-            logger.info("Got %s transaction(s).", len(transactions))
+            if transactions is not None:
+                logger.info("Got %s transaction(s).", len(transactions))
+            else:
+                logger.info("No transactions found.")
 
         # Decide what to keep
         if simple:
@@ -1565,7 +1568,8 @@ class CollectJSONResponses(object):
             instruments = instruments[0:n]
             investors = investors[0:n]
             positions = positions[0:n]
-            transactions = transactions[0:n]
+            if transactions is not None:
+                transactions = transactions[0:n]
 
         # Convert to json strings and dump to JSON text files with pretty
         # formatting.
@@ -1576,27 +1580,38 @@ class CollectJSONResponses(object):
             investors_json = json.dumps(investors, indent=4)
         if time_series:
             positions_json = json.dumps(positions, indent=4)
-            transactions_json = json.dumps(transactions, indent=4)
+            if transactions is not None:
+                transactions_json = json.dumps(transactions, indent=4)
+            else:
+                transactions_json = None
 
         # Write to files
         if basics:
-            with open("models.json", "w") as f:
+            models_path = get_output_path("models.json")
+            instruments_path = get_output_path("instruments.json")
+            investors_path = get_output_path("investors.json")
+            with open(models_path, "w") as f:
                 f.write(models_json)
-                logger.info(f"Wrote {len(models)} item(s) to models.json.")
-            with open("instruments.json", "w") as f:
+                logger.info(f"Wrote {len(models)} item(s) to {models_path}.")
+            with open(instruments_path, "w") as f:
                 f.write(instruments_json)
-                logger.info(f"Wrote {len(instruments)} item(s) to instruments.json.")
-            with open("investors.json", "w") as f:
+                logger.info(f"Wrote {len(instruments)} item(s) to {instruments_path}.")
+            with open(investors_path, "w") as f:
                 f.write(investors_json)
-                logger.info(f"Wrote {len(investors)} item(s) to investors.json.")
+                logger.info(f"Wrote {len(investors)} item(s) to {investors_path}.")
         if time_series:
             date_string = self.collection_date.strftime("%Y-%m-%d")
-            with open(f"holdings-{date_string}.json", "w") as f:
+            holdings_path = get_output_path(f"holdings-{date_string}.json")
+            transactions_path = get_output_path(f"transactions-{date_string}.json")
+            with open(holdings_path, "w") as f:
                 f.write(positions_json)
-                logger.info(f"Wrote {len(positions)} item(s) to holdings-{date_string}.json.")
-            with open(f"transactions-{date_string}.json", "w") as f:
-                f.write(transactions_json)
-                logger.info(f"Wrote {len(transactions)} item(s) to transactions-{date_string}.json.")
+                logger.info(f"Wrote {len(positions)} item(s) to {holdings_path}.")
+            if transactions_json is not None:
+                with open(transactions_path, "w") as f:
+                    f.write(transactions_json)
+                    logger.info(f"Wrote {len(transactions)} item(s) to {transactions_path}.")
+            else:
+                logger.info("No transactions found. No file written.")
 
     def collect(self, basics, time_series):
         """Collect JSON responses as strings."""
@@ -3652,70 +3667,6 @@ class FundProvider:
         return list(set(errata_list))
 
 
-# Date string format checker method
-def validate_date(ctx, param, value):
-    """Check if the date string is in the correct format."""
-    try:
-        return datetime.datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        raise ValueError("Date must be in the format YYYY-MM-DD.")
-
-@click.group()
-def cli():
-    """Tool for updating the cached Finworks data with fresh API data.
+class TransactionsProvider:
+    """Provide Finworks transactions in a standard for the history module
     """
-    pass
-
-@click.command()
-def status():
-    """Print last-date status, i.e., the date of the last update."""
-    cache = Cache()
-    last_date = cache.last_date()
-    logger.info(f"Cache last date is {last_date}")
-    logger.info(f"Using the {APIClient.DOMAIN} API.")
-
-@click.command()
-@click.option("-b", "--batch", type=int, nargs=1, help="Updates the cache in batches of number of  days.", )
-@click.option("-i", "--increment", type=int, nargs=1, help="Add number of days from last date to cache data.", )
-@click.option("-n", "--batches", type=int, nargs=1, default=None, help="Number of batches to run. If not provided then will run till completion.", )
-@click.option("-r", "--roll_back", type=int, nargs=1, default=1, help="Roll back start date by number of days to overwrite stale data.", )
-@click.option("-t", "--to-date", type=str, nargs=1, help="Alternative date for today. Overrides the --increment argument.")
-@click.option("-T", "--test", is_flag=True, help="Use test fixtures instead of API data.")
-def update(batch, increment, batches, roll_back, to_date, test):
-    """Update the cache with API data."""
-    # Use test fixture data instead of API data if the test flag is set
-    if test:
-        cache = Cache(use_test_data=True)
-    else:
-        cache = Cache()
-
-    if roll_back:
-        if roll_back < 1:
-            raise ValueError(
-                "Expected ROLL_BACK to be a positive non-zero integer.")
-
-    if batch:
-        if batch < 1:
-            raise ValueError(
-                "Expected BATCH to be a positive non-zero integer.")
-        cache.batch_update(batch_size=batch, roll_back=roll_back, batches=batches)
-        return
-
-    elif increment:
-        if increment < 1:
-            raise ValueError(
-                "Expected INCREMENT to be a positive non-zero integer.")
-        cache.update(increment=increment, roll_back=roll_back)
-
-    elif to_date:
-        to_date = validate_date(None, None, to_date)
-        cache.update(to_date=to_date, roll_back=roll_back)
-
-    else:
-        cache.update(roll_back=roll_back)
-
-cli.add_command(status)
-cli.add_command(update)
-
-if __name__ == "__main__":
-    cli()
