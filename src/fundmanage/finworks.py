@@ -574,8 +574,8 @@ class APIClient(object):
         raise Exception("Invalid DOMAIN selection.")
 
     # Connector settings
-    CONNECTION_LIMIT = 4 # Maximum number of connections
-    CONNECTION_LIMIT_PER_HOST = 2  # Maximum number of connections per host
+    CONNECTION_LIMIT = 8 # Maximum number of connections
+    CONNECTION_LIMIT_PER_HOST = 4  # Maximum number of connections per host
     TTL_DNS_CACHE = 10 * 60  # DNS cache time-to-live seconds
     ENABLE_CLEANUP_CLOSED = True  # Clean up closed SSL transports
 
@@ -1286,38 +1286,46 @@ class PositionsFrame(TimeSeriesFrame):
         models = models.data[["model_portfolio_id", "model_ticker"]].drop_duplicates()
         instruments = instruments.data[["instrument_id", "isin", "ticker", "currency", "status"]].drop_duplicates()
         investors = investors.data[["client_account_id", "model_portfolio_id"]].drop_duplicates()
-        # Merge models, instruments and investors into positions table
+
+
+        # Merge investors into positions table
         positions_df = pd.DataFrame.merge(
             self.data,
             investors,
             on=["client_account_id"],
             how="left",
             )
+        # Test merge for orphaned positions by client_account_id
+        if positions_df["model_portfolio_id"].isnull().any():
+            raise ValueError(
+                "Orphaned positions by client_account_id in positions table. "
+                "Not all investor accounts in positions table are in investors table.")
+
+        # Merge models into positions table
         positions_df = pd.DataFrame.merge(
             positions_df,
             models,
             on="model_portfolio_id",
             how="left",
             )
+        # Test merge for orphaned positions by model_portfolio_id
+        if positions_df["model_ticker"].isnull().any():
+            raise ValueError(
+                "Orphaned positions by model_portfolio_id in positions table. "
+                "Not all models in positions table are in models table.")
+
+        # Merge instruments into positions table
         positions_df = pd.DataFrame.merge(
             positions_df,
             instruments,
             on="instrument_id",
             how="left",
             )
-
-        # Check that all models in the  positions table are in the models table.
-        if positions_df["model_ticker"].isnull().any():
-            raise ValueError(
-                "Not all models in positions table are in models table.")
-        # Check that all instruments in the  positions table are in the instruments table.
+        # Test merge for orphaned positions by instrument_id
         if positions_df["isin"].isnull().any():
             raise ValueError(
+                "Orphaned positions by instrument_id in positions table. "
                 "Not all instruments in positions table are in instruments table.")
-        # Check that all investor accounts in the  positions table are in the investors table.
-        if positions_df["client_account_id"].isnull().any():
-            raise ValueError(
-                "Not all investor accounts in positions table are in investors table.")
 
         # Fix the currency columns names causes by the merge operations
         positions_df = positions_df.rename(columns={"currency_x": "currency"})
@@ -1424,6 +1432,14 @@ class TransactionsFrame(TimeSeriesFrame):
 
     def merge(self, models: ModelsFrame, instruments:InstrumentsFrame, investors:InvestorsFrame):
         """Merge transactions with models, instruments and investors."""
+        # Check arguments types
+        if not isinstance(models, ModelsFrame):
+            raise ValueError("Models argument is not a ModelsFrame object.")
+        if not isinstance(instruments, InstrumentsFrame):
+            raise ValueError("Instruments argument is not an InstrumentsFrame object.")
+        if not isinstance(investors, InvestorsFrame):
+            raise ValueError("Investors argument is not an InvestorsFrame object.")
+
         # Do not process empty DataFrame
         if self.empty:
             # Add the extra columns to the empty data frame
@@ -1436,38 +1452,45 @@ class TransactionsFrame(TimeSeriesFrame):
         models = models.data[["model_portfolio_id", "model_ticker"]].drop_duplicates()
         instruments = instruments.data[["instrument_id", "isin", "ticker", "currency", "status"]].drop_duplicates()
         investors = investors.data[["client_account_id", "model_portfolio_id"]].drop_duplicates()
-        # Merge models, instruments and investors into transactions table
+
+        # Merge investors ino transactions table
         transactions_df = pd.DataFrame.merge(
             self.data,
             investors,
             on=["client_account_id"],
             how="left",
             )
+        # Test merge for orphaned transactions by client_account_id
+        if transactions_df["model_portfolio_id"].isnull().any():
+            raise ValueError(
+                "Orphaned transactions by client_account_id in transactions table. "
+                "Not all investor accounts in transactions table are in investors table.")
+
+        # Merge models into transactions table
         transactions_df = pd.DataFrame.merge(
             transactions_df,
             models,
             on="model_portfolio_id",
             how="left",
             )
+        # Test merge for orphaned transactions by model_portfolio_id
+        if transactions_df["model_ticker"].isnull().any():
+            raise ValueError(
+                "Orphaned transactions by model_portfolio_id in transactions table. "
+                "Not all models in transactions table are in models table.")
+
+        # Merge instruments into transactions table
         transactions_df = pd.DataFrame.merge(
             transactions_df,
             instruments,
             on="instrument_id",
             how="left",
             )
-
-        # Check that all models in the  transactions table are in the models table.
-        if transactions_df["model_ticker"].isnull().any():
-            raise ValueError(
-                "Not all models in transactions table are in models table.")
-        # Check that all instruments in the  transactions table are in the instruments table.
+        # Test merge for orphaned transactions by instrument_id
         if transactions_df["isin"].isnull().any():
             raise ValueError(
+                "Orphaned transactions by instrument_id in transactions table. "
                 "Not all instruments in transactions table are in instruments table.")
-        # Check that all investor accounts in the  transactions table are in the investors table.
-        if transactions_df["client_account_id"].isnull().any():
-            raise ValueError(
-                "Not all investor accounts in transactions table are in investors table.")
 
         # Fix the currency columns names causes by the merge operations
         transactions_df = transactions_df.rename(columns={"currency_x": "currency"})
