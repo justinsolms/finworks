@@ -603,6 +603,8 @@ class APIClient(object):
         self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         self.ssl_context.load_cert_chain(certfile=crt, keyfile=key)
 
+        logger.info(f"API client initialized with url={self.url}")
+
     def __repr__(self) -> str:
         """Return the string representation of the object."""
         return f"APIClient(url={self.url}, ssl_context={self.ssl_context})"

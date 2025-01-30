@@ -46,7 +46,6 @@ class JSONValidator:
                 if isinstance(expected_type, dict):
                     if not isinstance(value, dict):
                         self.exceptions.append(f"Key '{key}' in item {identity} is not a dict")
-                        import ipdb; ipdb.set_trace()
                         continue
 
                     for nested_key, nested_type in expected_type.items():
@@ -218,7 +217,8 @@ class TransactionsValidator(JSONValidator):
         "Description": str,
         "Units": {
             "type": str,
-            "currency": str,
+            "currency": str,  # FIXME: This is not in the spec but is in the API response
+            # FIXME: The spec indicates there should be an "Instrument id": str key here
             "value": str
         },
         "Price": {
