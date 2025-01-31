@@ -2,7 +2,20 @@ import json
 import os
 
 class JSONValidator:
-    """Base class for JSON validation and cleaning."""
+    """Base class for JSON validation and cleaning.
+
+    1. Check JSON data for structure and type using the STRUCTURE_AND_TYPES dict
+       noting when there is a nested list of dicts. Do this for all nested
+       levels.
+    2. Use the KEYS_TO_RENAME dict to rename all fields regardless of nesting.
+    3. Drop keys as per the KEYS_TO_DROP list
+    4. Use IDENTITY_KEYS to construct the item identity for logging.
+    5. Log all exceptions per item as log rows identifying the item and the
+       exception. Do not raise exception. Only log them.
+    6. Output the validated and cleaned data preserving the original JSON
+       structure and data
+
+    """
 
     # Name used for data set identification
     NAME = "base"
@@ -11,7 +24,7 @@ class JSONValidator:
     IDENTITY_KEYS = []
 
     # Define the required keys for the JSON data set
-    REQUIRED_KEYS = {}
+    STRUCTURE_AND_TYPES = {}
 
     # Define keys to drop if any
     KEYS_TO_DROP = []
@@ -28,52 +41,57 @@ class JSONValidator:
             return json.load(file)
 
     def validate_and_clean(self, data):
+        def validate_item(item, structure, path=""):
+            if isinstance(structure, dict):
+                for key, value in structure.items():
+                    if key in item:
+                        if isinstance(value, dict):
+                            validate_item(item[key], value, path + key + ".")
+                        elif isinstance(value, list) and isinstance(item[key], list):
+                            for i, sub_item in enumerate(item[key]):
+                                validate_item(sub_item, value[0], path + key + f"[{i}].")
+                        elif not isinstance(item[key], value):
+                            self.exceptions.append(f"{path}{key}: Expected {value}, got {type(item[key])}")
+                    else:
+                        self.exceptions.append(f"{path}{key}: Missing key")
+            else:
+                if not isinstance(item, structure):
+                    self.exceptions.append(f"{path}: Expected {structure}, got {type(item)}")
+
+        def rename_keys(item, rename_map):
+            if isinstance(item, dict):
+                for old_key, new_key in rename_map.items():
+                    if old_key in item:
+                        item[new_key] = item.pop(old_key)
+                for key, value in item.items():
+                    rename_keys(value, rename_map)
+            elif isinstance(item, list):
+                for sub_item in item:
+                    rename_keys(sub_item, rename_map)
+
+        def drop_keys(item, keys_to_drop):
+            if isinstance(item, dict):
+                for key in keys_to_drop:
+                    if key in item:
+                        item.pop(key)
+                for key, value in item.items():
+                    drop_keys(value, keys_to_drop)
+            elif isinstance(item, list):
+                for sub_item in item:
+                    drop_keys(sub_item, keys_to_drop)
+
+        def construct_identity(item):
+            return ", ".join([f"{key}={item.get(key, 'N/A')}" for key in self.IDENTITY_KEYS])
+
         cleaned_data = []
-
-        for idx, item in enumerate(data):
-            cleaned_item = {}
-
-            # Using the identity keys, construct a unique identifier for each
-            # item from the key-value pairs
-            identity = ", ".join([f"{key}={item[key]}" for key in self.IDENTITY_KEYS])
-
-            for key, expected_type in self.REQUIRED_KEYS.items():
-                if key not in item:
-                    self.exceptions.append(f"Missing key '{key}' in item: ({identity})")
-                    continue
-
-                value = item[key]
-                if isinstance(expected_type, dict):
-                    if not isinstance(value, dict):
-                        self.exceptions.append(f"Key '{key}' in item: ({identity}) is not a dict")
-                        continue
-
-                    cleaned_nested_item = {}
-                    for nested_key, nested_type in expected_type.items():
-                        if nested_key not in value:
-                            self.exceptions.append(f"Missing nested key '{nested_key}' under '{key}' in item: ({identity})")
-                            continue
-                        if not isinstance(value[nested_key], nested_type):
-                            self.exceptions.append(f"Nested key '{nested_key}' under '{key}' in item: ({identity}) has incorrect type.")
-                            continue
-
-                        renamed_nested_key = self.KEYS_TO_RENAME.get(nested_key, nested_key)
-                        cleaned_nested_item[renamed_nested_key] = value[nested_key]
-
-                    renamed_key = self.KEYS_TO_RENAME.get(key, key)
-                    cleaned_item[renamed_key] = cleaned_nested_item
-                else:
-                    if not isinstance(value, expected_type):
-                        self.exceptions.append(f"Key '{key}' in item: ({identity}) has incorrect type.")
-                        continue
-
-                    renamed_key = self.KEYS_TO_RENAME.get(key, key)
-                    cleaned_item[renamed_key] = value
-
-            for key_to_drop in self.KEYS_TO_DROP:
-                cleaned_item.pop(key_to_drop, None)
-
-            cleaned_data.append(cleaned_item)
+        for item in data:
+            identity = construct_identity(item)
+            validate_item(item, self.STRUCTURE_AND_TYPES)
+            rename_keys(item, self.KEYS_TO_RENAME)
+            drop_keys(item, self.KEYS_TO_DROP)
+            cleaned_data.append(item)
+            if self.exceptions:
+                self.exceptions.append(f"Item identity: {identity}")
 
         return cleaned_data
 
@@ -94,7 +112,7 @@ class JSONValidator:
 class ModelsValidator(JSONValidator):
     NAME = "models"
     IDENTITY_KEYS = ["Model portfolio id"]
-    REQUIRED_KEYS = {
+    STRUCTURE_AND_TYPES = {
         "Splits": [
             {
             "Instrument id": int,
@@ -121,7 +139,7 @@ class ModelsValidator(JSONValidator):
 class InstrumentsValidator(JSONValidator):
     NAME = "instruments"
     IDENTITY_KEYS = ["Instrument id"]
-    REQUIRED_KEYS = {
+    STRUCTURE_AND_TYPES = {
         "Code": str,
         "Currency": str,
         "ISIN Number": str,
@@ -131,7 +149,7 @@ class InstrumentsValidator(JSONValidator):
         "Name": str,
         "Status": str
     }
-    KEYS_TO_DROP = []  # Define keys to drop if any
+    KEYS_TO_DROP = ["Instrument provider unique id"]  # Define keys to drop if any
     KEYS_TO_RENAME = {
         "Code": "code",
         "Currency": "currency",
@@ -147,7 +165,7 @@ class InstrumentsValidator(JSONValidator):
 class InvestorsValidator(JSONValidator):
     NAME = "investors"
     IDENTITY_KEYS = ["Client account id"]
-    REQUIRED_KEYS = {
+    STRUCTURE_AND_TYPES = {
         "Client account id": int,
         "Contract id": int,
         "Identification number": str,
@@ -182,7 +200,7 @@ class InvestorsValidator(JSONValidator):
 class HoldingsValidator(JSONValidator):
     NAME = "holdings"
     IDENTITY_KEYS = ["Client account id", "Contract id", "Instrument id"]
-    REQUIRED_KEYS = {
+    STRUCTURE_AND_TYPES = {
         "Client account id": int,
         "Date": str,
         "Contract id": int,
@@ -214,7 +232,7 @@ class HoldingsValidator(JSONValidator):
     KEYS_TO_DROP = ["Instrument account number", "Price date"]
     KEYS_TO_RENAME = {
         "Client account id": "client_account_id",
-        "Date": "date"
+        "Date": "date",
         "Contract id": "contract_id",
         "Market Value in Fund Currency": "fund_currency_value",
         "Latest available price": "price",
@@ -228,7 +246,7 @@ class HoldingsValidator(JSONValidator):
 class TransactionsValidator(JSONValidator):
     NAME = "transactions"
     IDENTITY_KEYS = ["Transaction id"]
-    REQUIRED_KEYS = {
+    STRUCTURE_AND_TYPES = {
         "Transaction id": int,
         "Contract id": int,
         "Client account id": int,
@@ -263,7 +281,7 @@ class TransactionsValidator(JSONValidator):
         "Contract id": "contract_id",
         "Client account id": "client_account_id",
         "Processed date": "processed_date",
-        "Date": "date"
+        "Date": "date",
         "Instrument id": "instrument_id",
         "Description": "description",
         "Instrument account number": "instrument_account_number",
