@@ -48,18 +48,27 @@ class JSONValidator:
                         self.exceptions.append(f"Key '{key}' in item: ({identity}) is not a dict")
                         continue
 
+                    cleaned_nested_item = {}
                     for nested_key, nested_type in expected_type.items():
                         if nested_key not in value:
                             self.exceptions.append(f"Missing nested key '{nested_key}' under '{key}' in item: ({identity})")
                             continue
                         if not isinstance(value[nested_key], nested_type):
                             self.exceptions.append(f"Nested key '{nested_key}' under '{key}' in item: ({identity}) has incorrect type.")
+                            continue
+
+                        renamed_nested_key = self.KEYS_TO_RENAME.get(nested_key, nested_key)
+                        cleaned_nested_item[renamed_nested_key] = value[nested_key]
+
+                    renamed_key = self.KEYS_TO_RENAME.get(key, key)
+                    cleaned_item[renamed_key] = cleaned_nested_item
                 else:
                     if not isinstance(value, expected_type):
                         self.exceptions.append(f"Key '{key}' in item: ({identity}) has incorrect type.")
+                        continue
 
-                renamed_key = self.KEYS_TO_RENAME.get(key, key)
-                cleaned_item[renamed_key] = item.get(key)
+                    renamed_key = self.KEYS_TO_RENAME.get(key, key)
+                    cleaned_item[renamed_key] = value
 
             for key_to_drop in self.KEYS_TO_DROP:
                 cleaned_item.pop(key_to_drop, None)
