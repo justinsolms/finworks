@@ -81,6 +81,87 @@ class JSONValidator:
         except Exception as e:
             raise e
 
+
+class ModelsValidator(JSONValidator):
+    NAME = "models"
+    IDENTITY_KEYS = ["Model portfolio id"]
+    REQUIRED_KEYS = {
+        "Model portfolio id": str,
+        "Splits": list,
+        "Name": str,
+        "Code": str
+    }
+    KEYS_TO_DROP = []  # Define keys to drop if any
+    KEYS_TO_RENAME = {
+        "Model portfolio id": "model_portfolio_id",
+        "Name": "name",
+        "Code": "code"
+    }
+
+
+class InstrumentsValidator(JSONValidator):
+    NAME = "instruments"
+    IDENTITY_KEYS = ["Instrument id"]
+    REQUIRED_KEYS = {
+        "Instrument id": str,
+        "Instrument type": str,
+        "Name": str,
+        "Code": str,
+        "ISIN Number": str,
+        "Instrument provider": str,
+        "Currency": str,
+        "Status": str
+    }
+    KEYS_TO_DROP = []  # Define keys to drop if any
+    KEYS_TO_RENAME = {
+        "Instrument id": "instrument_id",
+        "Instrument type": "instrument_type",
+        "Name": "name",
+        "Code": "code",
+        "ISIN Number": "isin_number",
+        "Instrument provider": "instrument_provider",
+        "Currency": "currency",
+        "Status": "status"
+    }
+
+
+class InvestorsValidator(JSONValidator):
+    NAME = "investors"
+    IDENTITY_KEYS = ["Client account id"]
+    REQUIRED_KEYS = {
+        "Policy number": str,
+        "Contract number": str,
+        "Contract id": str,
+        "Product": str,
+        "Take On Date": str,
+        "Account number": str,
+        "Description": str,
+        "Identification number": str,
+        "Status": {
+            "identifier": str,
+            "active": bool
+        },
+        "Modelportfolio": str,
+        "Client account id": str,
+        "Investor name": str
+    }
+    KEYS_TO_DROP = []  # Define keys to drop if any
+    KEYS_TO_RENAME = {
+        "Policy number": "policy_number",
+        "Contract number": "contract_number",
+        "Contract id": "contract_id",
+        "Product": "product",
+        "Take On Date": "take_on_date",
+        "Account number": "account_number",
+        "Description": "description",
+        "Identification number": "identification_number",
+        "Status": "status",
+        "Modelportfolio": "model_portfolio",
+        "Client account id": "client_account_id",
+        "Investor name": "investor_name"
+    }
+
+
 class HoldingsValidator(JSONValidator):
     NAME = "holdings"
     IDENTITY_KEYS = ["Client account id", "Contract id", "Instrument id"]
@@ -122,82 +203,6 @@ class HoldingsValidator(JSONValidator):
         "Date": "date"
     }
 
-class ModelsValidator(JSONValidator):
-    NAME = "models"
-    IDENTITY_KEYS = ["Model portfolio id"]
-    REQUIRED_KEYS = {
-        "Model portfolio id": str,
-        "Splits": list,
-        "Name": str,
-        "Code": str
-    }
-    KEYS_TO_DROP = []  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Model portfolio id": "model_portfolio_id",
-        "Name": "name",
-        "Code": "code"
-    }
-
-class InstrumentsValidator(JSONValidator):
-    NAME = "instruments"
-    IDENTITY_KEYS = ["Instrument id"]
-    REQUIRED_KEYS = {
-        "Instrument id": str,
-        "Instrument type": str,
-        "Name": str,
-        "Code": str,
-        "ISIN Number": str,
-        "Instrument provider": str,
-        "Currency": str,
-        "Status": str
-    }
-    KEYS_TO_DROP = []  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Instrument id": "instrument_id",
-        "Instrument type": "instrument_type",
-        "Name": "name",
-        "Code": "code",
-        "ISIN Number": "isin_number",
-        "Instrument provider": "instrument_provider",
-        "Currency": "currency",
-        "Status": "status"
-    }
-
-class InvestorsValidator(JSONValidator):
-    NAME = "investors"
-    IDENTITY_KEYS = ["Client account id"]
-    REQUIRED_KEYS = {
-        "Policy number": str,
-        "Contract number": str,
-        "Contract id": str,
-        "Product": str,
-        "Take On Date": str,
-        "Account number": str,
-        "Description": str,
-        "Identification number": str,
-        "Status": {
-            "identifier": str,
-            "active": bool
-        },
-        "Modelportfolio": str,
-        "Client account id": str,
-        "Investor name": str
-    }
-    KEYS_TO_DROP = []  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Policy number": "policy_number",
-        "Contract number": "contract_number",
-        "Contract id": "contract_id",
-        "Product": "product",
-        "Take On Date": "take_on_date",
-        "Account number": "account_number",
-        "Description": "description",
-        "Identification number": "identification_number",
-        "Status": "status",
-        "Modelportfolio": "model_portfolio",
-        "Client account id": "client_account_id",
-        "Investor name": "investor_name"
-    }
 
 class TransactionsValidator(JSONValidator):
     NAME = "transactions"
@@ -252,10 +257,10 @@ class TransactionsValidator(JSONValidator):
 
 if __name__ == "__main__":
     validators = [
-        (HoldingsValidator("holdings-2023-12-14.json"), "validated_holdings.json"),
         (ModelsValidator("models.json"), "validated_models.json"),
         (InstrumentsValidator("instruments.json"), "validated_instruments.json"),
         (InvestorsValidator("investors.json"), "validated_investors.json"),
+        (HoldingsValidator("holdings-2023-12-14.json"), "validated_holdings.json"),
         (TransactionsValidator("transactions-2023-12-14.json"), "validated_transactions.json"),
     ]
 
