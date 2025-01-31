@@ -552,8 +552,8 @@ class APIClient(object):
     """
 
     # Comment out the unused operational mode.
-    ENVIRONMENT = "test"
     ENVIRONMENT = "production"
+    ENVIRONMENT = "test"
 
     # Domains to choose from
     DOMAIN_PROD = "secure.aospartner.com"
