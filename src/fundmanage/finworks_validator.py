@@ -95,16 +95,26 @@ class ModelsValidator(JSONValidator):
     NAME = "models"
     IDENTITY_KEYS = ["Model portfolio id"]
     REQUIRED_KEYS = {
-        "Model portfolio id": str,
-        "Splits": list,
+        "Splits": [
+            {
+            "Instrument id": int,
+            "Split": {
+                "value": str,
+                "type": str}
+            }
+        ],
+        "Code": str,
+        "Model portfolio id": int,
         "Name": str,
-        "Code": str
     }
     KEYS_TO_DROP = []  # Define keys to drop if any
     KEYS_TO_RENAME = {
+        "Splits": "splits",
+        "Instrument id": "instrument_id",
+        "Split": "split",
+        "Code": "code",
         "Model portfolio id": "model_portfolio_id",
         "Name": "name",
-        "Code": "code"
     }
 
 
@@ -112,24 +122,24 @@ class InstrumentsValidator(JSONValidator):
     NAME = "instruments"
     IDENTITY_KEYS = ["Instrument id"]
     REQUIRED_KEYS = {
-        "Instrument id": str,
+        "Code": str,
+        "Currency": str,
+        "ISIN Number": str,
+        "Instrument id": int,
+        "Instrument provider": str,
         "Instrument type": str,
         "Name": str,
-        "Code": str,
-        "ISIN Number": str,
-        "Instrument provider": str,
-        "Currency": str,
         "Status": str
     }
     KEYS_TO_DROP = []  # Define keys to drop if any
     KEYS_TO_RENAME = {
+        "Code": "code",
+        "Currency": "currency",
+        "ISIN Number": "isin_number",
         "Instrument id": "instrument_id",
+        "Instrument provider": "instrument_provider",
         "Instrument type": "instrument_type",
         "Name": "name",
-        "Code": "code",
-        "ISIN Number": "isin_number",
-        "Instrument provider": "instrument_provider",
-        "Currency": "currency",
         "Status": "status"
     }
 
@@ -138,21 +148,20 @@ class InvestorsValidator(JSONValidator):
     NAME = "investors"
     IDENTITY_KEYS = ["Client account id"]
     REQUIRED_KEYS = {
-        "Policy number": str,
-        "Contract number": str,
-        "Contract id": str,
-        "Product": str,
-        "Take On Date": str,
-        "Account number": str,
-        "Description": str,
+        "Client account id": int,
+        "Contract id": int,
         "Identification number": str,
+        "Contract number": str,
+        "Description": str,
+        "Product": str,
+        "Investor name": str,
+        "Policy number": str,
         "Status": {
             "identifier": str,
             "active": bool
         },
-        "Modelportfolio": str,
-        "Client account id": str,
-        "Investor name": str
+        "Take On Date": str,
+        "Modelportfolio": int,
     }
     KEYS_TO_DROP = []  # Define keys to drop if any
     KEYS_TO_RENAME = {
@@ -161,7 +170,6 @@ class InvestorsValidator(JSONValidator):
         "Contract id": "contract_id",
         "Product": "product",
         "Take On Date": "take_on_date",
-        "Account number": "account_number",
         "Description": "description",
         "Identification number": "identification_number",
         "Status": "status",
@@ -175,41 +183,45 @@ class HoldingsValidator(JSONValidator):
     NAME = "holdings"
     IDENTITY_KEYS = ["Client account id", "Contract id", "Instrument id"]
     REQUIRED_KEYS = {
-        "Instrument id": str,
-        "Latest available price": {
-            "type": str,
+        "Client account id": int,
+        "Date": str,
+        "Contract id": int,
+        "Instrument account number": str,
+        "Market Value in Fund Currency": {
             "currency": str,
-            "Instrument id": str,
-            "value": str
+            "value": str,
+            "type": str,
         },
-        "Client account id": str,
-        "Contract id": str,
+        "Latest available price": {
+            "value": str,
+            "currency": str,
+            "Instrument id": int,
+            "type": str,
+        },
+        "Instrument id": int,
+        "Market Value in System Currency": {
+            "currency": str,
+            "value": str,
+            "type": str,
+        },
+        "Price date": str,
         "Units": {
             "type": str,
-            "Instrument id": str,
+            "Instrument id": int,
             "value": str
         },
-        "Market Value in Fund Currency": {
-            "type": str,
-            "currency": str,
-            "value": str
-        },
-        "Market Value in System Currency": {
-            "type": str,
-            "currency": str,
-            "value": str
-        },
-        "Date": str
     }
     KEYS_TO_DROP = ["Instrument account number", "Price date"]
     KEYS_TO_RENAME = {
-        "Instrument id": "instrument_id",
         "Client account id": "client_account_id",
-        "Contract id": "contract_id",
-        "Units": "units",
-        "Market Value in Fund Currency": "fund_currency_value",
-        "Market Value in System Currency": "system_currency_value",
         "Date": "date"
+        "Contract id": "contract_id",
+        "Market Value in Fund Currency": "fund_currency_value",
+        "Latest available price": "price",
+        "Instrument id": "instrument_id",
+        "Market Value in System Currency": "system_currency_value",
+        "Price date": "price_date",
+        "Units": "units",
     }
 
 
@@ -217,51 +229,50 @@ class TransactionsValidator(JSONValidator):
     NAME = "transactions"
     IDENTITY_KEYS = ["Transaction id"]
     REQUIRED_KEYS = {
+        "Transaction id": int,
+        "Contract id": int,
+        "Client account id": int,
+        "Processed date": str,
+        "Date": str,
+        "Instrument id": int,
+        "Description": str,
         "Instrument account number": str,
         "Amount": {
-            "type": str,
             "currency": str,
-            "value": str
-        },
-        "Transaction id": str,
-        "Contract id": str,
-        "Instrument id": str,
-        "Is Cashflow": str,
-        "Type": str,
-        "Description": str,
-        "Units": {
+            "value": str,
             "type": str,
-            "currency": str,  # FIXME: This is not in the spec but is in the API response
-            # FIXME: The spec indicates there should be an "Instrument id": str key here
-            "value": str
         },
         "Price": {
-            "type": str,
+            "value": str,
             "currency": str,
-            "Instrument id": str,
-            "value": str
+            "Instrument id": int,
+            "type": str,
         },
-        "Client account id": str,
-        "Processed date": str,
+        "Units": {
+            "value": str,
+            "Instrument id": int,
+            "type": str,
+        },
+        "Is Cashflow": str,
+        "Type": str,
         "Sub type": str,
-        "Date": str
     }
     KEYS_TO_DROP = []  # Define keys to drop if any
     KEYS_TO_RENAME = {
-        "Instrument account number": "instrument_account_number",
-        "Amount": "amount",
         "Transaction id": "transaction_id",
         "Contract id": "contract_id",
-        "Instrument id": "instrument_id",
-        "Is Cashflow": "is_cashflow",
-        "Type": "type",
-        "Description": "description",
-        "Units": "units",
-        "Price": "price",
         "Client account id": "client_account_id",
         "Processed date": "processed_date",
-        "Sub type": "sub_type",
         "Date": "date"
+        "Instrument id": "instrument_id",
+        "Description": "description",
+        "Instrument account number": "instrument_account_number",
+        "Amount": "amount",
+        "Price": "price",
+        "Units": "units",
+        "Is Cashflow": "is_cashflow",
+        "Type": "type",
+        "Sub type": "sub_type",
     }
 
 if __name__ == "__main__":
