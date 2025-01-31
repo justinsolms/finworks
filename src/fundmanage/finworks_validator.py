@@ -35,28 +35,28 @@ class JSONValidator:
 
             # Using the identity keys, construct a unique identifier for each
             # item from the key-value pairs
-            identity = "-".join([f"{key}:{item[key]}" for key in self.IDENTITY_KEYS])
+            identity = ", ".join([f"{key}={item[key]}" for key in self.IDENTITY_KEYS])
 
             for key, expected_type in self.REQUIRED_KEYS.items():
                 if key not in item:
-                    self.exceptions.append(f"Missing key '{key}' in item {identity}")
+                    self.exceptions.append(f"Missing key '{key}' in item: ({identity})")
                     continue
 
                 value = item[key]
                 if isinstance(expected_type, dict):
                     if not isinstance(value, dict):
-                        self.exceptions.append(f"Key '{key}' in item {identity} is not a dict")
+                        self.exceptions.append(f"Key '{key}' in item: ({identity}) is not a dict")
                         continue
 
                     for nested_key, nested_type in expected_type.items():
                         if nested_key not in value:
-                            self.exceptions.append(f"Missing nested key '{nested_key}' under '{key}' in item {identity}")
+                            self.exceptions.append(f"Missing nested key '{nested_key}' under '{key}' in item: ({identity})")
                             continue
                         if not isinstance(value[nested_key], nested_type):
-                            self.exceptions.append(f"Nested key '{nested_key}' under '{key}' in item {identity} has incorrect type.")
+                            self.exceptions.append(f"Nested key '{nested_key}' under '{key}' in item: ({identity}) has incorrect type.")
                 else:
                     if not isinstance(value, expected_type):
-                        self.exceptions.append(f"Key '{key}' in item {identity} has incorrect type.")
+                        self.exceptions.append(f"Key '{key}' in item: ({identity}) has incorrect type.")
 
                 renamed_key = self.KEYS_TO_RENAME.get(key, key)
                 cleaned_item[renamed_key] = item.get(key)
