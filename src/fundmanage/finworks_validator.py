@@ -15,6 +15,11 @@ class JSONValidator:
     6. Output the validated and cleaned data preserving the original JSON
        structure and data
 
+    Warning
+    -------
+    This class will not detect extra keys in the JSON data set. It will only
+    check for the required keys and their types.
+
     """
 
     # Name used for data set identification
@@ -41,22 +46,25 @@ class JSONValidator:
             return json.load(file)
 
     def validate_and_clean(self, data):
+
         def validate_item(item, structure, path=""):
+            exceptions = []
             if isinstance(structure, dict):
                 for key, value in structure.items():
                     if key in item:
                         if isinstance(value, dict):
-                            validate_item(item[key], value, path + key + ".")
+                            exceptions.extend(validate_item(item[key], value, path + key + "."))
                         elif isinstance(value, list) and isinstance(item[key], list):
                             for i, sub_item in enumerate(item[key]):
-                                validate_item(sub_item, value[0], path + key + f"[{i}].")
+                                exceptions.extend(validate_item(sub_item, value[0], path + key + f"[{i}]."))
                         elif not isinstance(item[key], value):
-                            self.exceptions.append(f"{path}{key}: Expected {value}, got {type(item[key])}")
+                            exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
                     else:
-                        self.exceptions.append(f"{path}{key}: Missing key")
+                        exceptions.append(f"- {path}{key}: Missing key")
             else:
                 if not isinstance(item, structure):
-                    self.exceptions.append(f"{path}: Expected {structure}, got {type(item)}")
+                    exceptions.append(f"- {path}: Expected {structure}, got {type(item)}")
+            return exceptions
 
         def rename_keys(item, rename_map):
             if isinstance(item, dict):
@@ -86,12 +94,14 @@ class JSONValidator:
         cleaned_data = []
         for item in data:
             identity = construct_identity(item)
+            item_exceptions = validate_item(item, self.STRUCTURE_AND_TYPES)
+            if item_exceptions:
+                self.exceptions.append(f"Item identity: ({identity}):")
+                self.exceptions.extend(item_exceptions)
             validate_item(item, self.STRUCTURE_AND_TYPES)
             rename_keys(item, self.KEYS_TO_RENAME)
             drop_keys(item, self.KEYS_TO_DROP)
             cleaned_data.append(item)
-            if self.exceptions:
-                self.exceptions.append(f"Item identity: {identity}")
 
         return cleaned_data
 
@@ -180,6 +190,7 @@ class InvestorsValidator(JSONValidator):
         },
         "Take On Date": str,
         "Modelportfolio": int,
+        "Account number": str,
     }
     KEYS_TO_DROP = []  # Define keys to drop if any
     KEYS_TO_RENAME = {
