@@ -45,26 +45,29 @@ class JSONValidator:
         with open(self.json_file, 'r') as file:
             return json.load(file)
 
-    def validate_and_clean(self, data):
+    def validate_key_value(self, item, path, exceptions, key, value):
+        if key in item:
+            if isinstance(value, dict):
+                exceptions.extend(self.validate_item(item[key], value, path + key + "."))
+            elif isinstance(value, list) and isinstance(item[key], list):
+                for i, sub_item in enumerate(item[key]):
+                    exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
+            elif not isinstance(item[key], value):
+                exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
+        else:
+            exceptions.append(f"- {path}{key}: Missing key")
 
-        def validate_item(item, structure, path=""):
-            exceptions = []
-            if isinstance(structure, dict):
-                for key, value in structure.items():
-                    if key in item:
-                        if isinstance(value, dict):
-                            exceptions.extend(validate_item(item[key], value, path + key + "."))
-                        elif isinstance(value, list) and isinstance(item[key], list):
-                            for i, sub_item in enumerate(item[key]):
-                                exceptions.extend(validate_item(sub_item, value[0], path + key + f"[{i}]."))
-                        elif not isinstance(item[key], value):
-                            exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
-                    else:
-                        exceptions.append(f"- {path}{key}: Missing key")
-            else:
-                if not isinstance(item, structure):
-                    exceptions.append(f"- {path}: Expected {structure}, got {type(item)}")
-            return exceptions
+    def validate_item(self, item, structure, path=""):
+        exceptions = []
+        if isinstance(structure, dict):
+            for key, value in structure.items():
+                self.validate_key_value(item, path, exceptions, key, value)
+        else:
+            if not isinstance(item, structure):
+                exceptions.append(f"- {path}: Expected {structure}, got {type(item)}")
+        return exceptions
+
+    def validate_and_clean(self, data):
 
         def rename_keys(item, rename_map):
             if isinstance(item, dict):
@@ -94,11 +97,10 @@ class JSONValidator:
         cleaned_data = []
         for item in data:
             identity = construct_identity(item)
-            item_exceptions = validate_item(item, self.STRUCTURE_AND_TYPES)
+            item_exceptions = self.validate_item(item, self.STRUCTURE_AND_TYPES)
             if item_exceptions:
                 self.exceptions.append(f"Item identity: ({identity}):")
                 self.exceptions.extend(item_exceptions)
-            validate_item(item, self.STRUCTURE_AND_TYPES)
             rename_keys(item, self.KEYS_TO_RENAME)
             drop_keys(item, self.KEYS_TO_DROP)
             cleaned_data.append(item)
