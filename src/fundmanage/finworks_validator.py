@@ -210,7 +210,69 @@ class InvestorsValidator(JSONValidator):
     }
 
 
-class HoldingsValidator(JSONValidator):
+class SpecialTypeValidator(JSONValidator):
+
+    def validate_key_value(self, item, path, exceptions, key, value):
+        """Validate key-value pairs in the JSON data set.
+
+        The method is overridden to handle the special case when the key is
+        "type" in the STRUCTURE_AND_TYPES dict.
+
+        IN a nested dict the type key is used to determine the type of the of the
+        value key. For example:
+
+        {
+            "Units": {
+                "type": "Money",
+                "Money": {
+                    "currency": str,
+                    "value": str
+                },
+                "Unit": {
+                    "Instrument id": int,
+                    "currency": str,
+                    "value": str
+                }
+            }
+        }
+
+        The type key's value is read from the dict. The value is used
+        to select the corresponding dict from the STRUCTURE_AND_TYPES dict. This
+        dict is used in the usual manner to validate the nested dict. IN the
+        example above the type key's value is "Money" and the corresponding dict
+        is:
+
+        {
+            "currency": str,
+            "value": str
+        }
+
+        The method calls validate_item to recursively validate the nested dict.
+
+
+        """
+        if key in item:
+            if isinstance(value, dict):
+                if "type" in item[key]:
+                    type_key = item[key]["type"]
+                    if type_key not in value:
+                        exceptions.append(f"- {path}{key}: Invalid type key")
+                        return
+                    item_key = item[key]
+                    item_key.pop("type")
+                    type_structure = value[type_key]
+                    exceptions.extend(self.validate_item(item_key, type_structure, path + key + "."))
+                else:
+                    exceptions.extend(self.validate_item(item[key], value, path + key + "."))
+            elif isinstance(value, list) and isinstance(item[key], list):
+                for i, sub_item in enumerate(item[key]):
+                    exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
+            elif not isinstance(item[key], value):
+                exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
+        else:
+            exceptions.append(f"- {path}{key}: Missing key")
+
+class HoldingsValidator(SpecialTypeValidator):
     NAME = "holdings"
     IDENTITY_KEYS = ["Client account id", "Contract id", "Instrument id"]
     STRUCTURE_AND_TYPES = {
@@ -219,27 +281,39 @@ class HoldingsValidator(JSONValidator):
         "Contract id": int,
         "Instrument account number": str,
         "Market Value in Fund Currency": {
-            "currency": str,
-            "value": str,
             "type": str,
+            "Money": {
+                "currency": str,
+                "value": str,
+            },
         },
         "Latest available price": {
-            "value": str,
-            "currency": str,
-            "Instrument id": int,
             "type": str,
+            "Price": {
+                "Instrument id": int,
+                "value": str,
+                "currency": str,
+            },
         },
         "Instrument id": int,
         "Market Value in System Currency": {
-            "currency": str,
-            "value": str,
             "type": str,
+            "Money": {
+                "currency": str,
+                "value": str,
+            },
         },
         "Price date": str,
         "Units": {
             "type": str,
-            "Instrument id": int,
-            "value": str
+            "Money": {
+                "currency": str,
+                "value": str
+            },
+            "Unit": {
+                "Instrument id": int,
+                "value": str
+            }
         },
     }
     KEYS_TO_DROP = ["Instrument account number", "Price date"]
@@ -256,7 +330,7 @@ class HoldingsValidator(JSONValidator):
     }
 
 
-class TransactionsValidator(JSONValidator):
+class TransactionsValidator(SpecialTypeValidator):
     NAME = "transactions"
     IDENTITY_KEYS = ["Transaction id"]
     STRUCTURE_AND_TYPES = {
@@ -269,20 +343,30 @@ class TransactionsValidator(JSONValidator):
         "Description": str,
         "Instrument account number": str,
         "Amount": {
-            "currency": str,
-            "value": str,
             "type": str,
+            "Money": {
+                "currency": str,
+                "value": str,
+            },
         },
         "Price": {
-            "value": str,
-            "currency": str,
-            "Instrument id": int,
             "type": str,
+            "Price": {
+                "value": str,
+                "currency": str,
+                "Instrument id": int,
+            },
         },
         "Units": {
-            "value": str,
-            "Instrument id": int,
             "type": str,
+            "Money": {
+                "currency": str,
+                "value": str
+            },
+            "Unit": {
+                "Instrument id": int,
+                "value": str
+            },
         },
         "Is Cashflow": str,
         "Type": str,
