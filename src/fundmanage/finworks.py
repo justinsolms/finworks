@@ -320,9 +320,15 @@ class Task():
             # Warning: the flatten_data method modifies the original data.
             flattened_records = json_validator.flatten_data(results_records)
 
+            # Map the formatter to the flattened records
+            flattened_records, exception_list = self.map_formatter(self.formatter, flattened_records)
+            # TODO: Bring exceptions to the attention of the user
+
             # Return the formatted data the appropriate table class.
+            data_frame = pd.DataFrame(flattened_records)
             import ipdb; ipdb.set_trace()
-            self.response = self.table_class(pd.DataFrame(flattened_records))
+            self.response = self.table_class(data_frame)
+            # TODO: Bring exceptions to the attention of the user
 
             # If there are exceptions then dump them to a datetime stamped file on disk
             Task.dump_exception_list(self.__class__.__name__, exception_records)
@@ -362,20 +368,8 @@ class ModelsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Rename model fields
-        item["model_ticker"] = item.pop("Code")
-        item["model_portfolio_id"] = item.pop("Model portfolio id")
-        item["name"] = item.pop("Name")
-        # Flatten nested splits flat with the other dict items
-        for split in item["Splits"]:
-            instrument_id = split["Instrument id"]
-            value = split["Split"]
-            assert (
-                value["type"] == "Percentage"
-            ), "The split value `type` must be `Percentage`."
-            item[instrument_id] = value["value"]
-        # Pop off flattened splits
-        item.pop("Splits")
+        item.pop("spit_type")
+        item["value"] = item.pop("split_value")
         return item
 
 class InstrumentsTask(Task):
@@ -984,8 +978,8 @@ class ModelsFrame(BaseFrame):
             raise ValueError("Unexpected empty data argument.")
         if normalized or self.normalized:
             pass
-        else:
-            data = self.un_pivot(data)
+        # else:
+        #     data = self.un_pivot(data)
         super().__init__(data, merged)
 
     def data_mods(self):
