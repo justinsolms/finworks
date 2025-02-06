@@ -15,7 +15,6 @@ from typing import Callable
 import aiohttp
 
 import aiohttp.client_exceptions
-import click
 import pandas as pd
 from pandas import DataFrame
 from tqdm import tqdm
@@ -312,7 +311,6 @@ class Task():
             self.response = ex
         else:
             # Validate the models data
-            # TODO: Use the validator class to validate the data
             json_validator = self.validator_class()
             results_records, exception_records = json_validator.validate(json_records)
             # If there are exceptions then dump them to a datetime stamped file on disk

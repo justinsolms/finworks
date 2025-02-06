@@ -120,6 +120,34 @@ class JSONValidator:
         except Exception as e:
             raise e
 
+    def flatten_dict(self, d, parent_key='', sep='_'):
+        """Flatten a nested dictionary iteratively.
+
+        Parameters
+        ----------
+        d : dict
+            The dictionary to flatten.
+        parent_key : str, optional
+            The parent key for the current dictionary, by default ''.
+        sep : str, optional
+            The separator to use between keys, by default '_'.
+        """
+        items = []
+        for k, v in d.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self.flatten_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
+
+    def flatten_data(self, data):
+        """Flatten to a columnar format suitable for the first normal form."""
+        flattened_data = []
+        for item in data:
+            flattened_data.append(self.flatten_dict(item))
+        return flattened_data
+
 
 class ModelsValidator(JSONValidator):
     NAME = "models"
@@ -147,6 +175,25 @@ class ModelsValidator(JSONValidator):
         "Name": "name",
     }
 
+    def flatten_data(self, data):
+        """Flatten to a columnar format suitable for the first normal form.
+
+        This produces a list of dictionaries with the "Splits" list flattened
+        and the remaining keys repeated for each item in the "Splits" list. This
+        is suitable for converting to a columnar format in the first normal
+        form.
+
+        """
+        flattened_data = []
+        for item in data:
+            splits = item.pop("splits")
+            for split in splits:
+                # Flatten the split dict
+                split = self.flatten_dict(split)
+                # Add the remaining keys to the split dict
+                split.update(item)
+                flattened_data.append(split)
+        return flattened_data
 
 class InstrumentsValidator(JSONValidator):
     NAME = "instruments"
@@ -194,7 +241,7 @@ class InvestorsValidator(JSONValidator):
         "Modelportfolio": int,
         "Account number": str,
     }
-    KEYS_TO_DROP = []  # Define keys to drop if any
+    KEYS_TO_DROP = ["Account number"]  # Define keys to drop if any
     KEYS_TO_RENAME = {
         "Policy number": "policy_number",
         "Contract number": "contract_number",
@@ -271,6 +318,7 @@ class SpecialTypeValidator(JSONValidator):
                 exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
         else:
             exceptions.append(f"- {path}{key}: Missing key")
+
 
 class PositionsValidator(SpecialTypeValidator):
     NAME = "holdings"
@@ -402,8 +450,9 @@ if __name__ == "__main__":
     for validator, input_file, output_file in validators:
         try:
             validated_data = validator.validate_file(input_file)
+            flattened_data = validator.flatten_data(validated_data)
             with open(output_file, "w") as file:
-                json.dump(validated_data, file, indent=4)
+                json.dump(flattened_data, file, indent=4)
             print(f"Validation and cleaning successful. Cleaned data saved to {output_file}.")
         except ValueError as e:
             print(e)
