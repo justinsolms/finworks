@@ -306,7 +306,6 @@ class SpecialTypeValidator(JSONValidator):
                         exceptions.append(f"- {path}{key}: Invalid type key")
                         return
                     item_key = item[key]
-                    item_key.pop("type")
                     type_structure = value[type_key]
                     exceptions.extend(self.validate_item(item_key, type_structure, path + key + "."))
                 else:
