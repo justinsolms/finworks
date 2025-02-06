@@ -24,6 +24,10 @@ from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
+from fundmanage.finworks_validator import ModelsValidator, InstrumentsValidator
+from fundmanage.finworks_validator import InvestorsValidator
+from fundmanage.finworks_validator import PositionsValidator, TransactionsValidator
+
 from fundmanage import get_certificates_path, get_data_path, get_output_path
 from .funds import FundsList
 from abc import ABC, abstractmethod
@@ -94,18 +98,44 @@ class FinworksAPIError(BaseException):
 
 
 class Task():
-    """A task to fetch data from the Finworks API."""
+    """A task base class to fetch data from the Finworks API.
+        Request headers to be sent with the request.
+
+    Parameters
+    ----------
+    url : str
+        The base URL of the Finworks API.
+    path : str
+        The path of the service within the domain to which the request will be sent.
+    table_class : object
+        The class object that will be used to store the response data.
+    validator_class : finworks_validator.JSONValidator
+        The class object that will be used to validate and then format the
+        response data.
+    headers : dict
+        The headers to include in the API request. Example:
+        .. code-block:: json
+            {
+                "Authorization": "Bearer <token>",
+                "Content-Type": "application/json"
+            }
+    ssl_context : ssl.SSLContext
+        The SSL context to use for the request.
+    kwargs : dict
+        Keyword arguments are used for the endpoint parameters.
+    """
 
     PATH = ""
 
     def __init__(
-        self, url: str, path: str, table_class: object,
+        self, url: str, path: str, table_class: object, validator_class: object,
         headers: dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
         self.url = url
         self.path = path
         self.url_path = self.url + self.path
         self.table_class = table_class
+        self.validator_class = validator_class
         self.headers = headers
         self.ssl_context = ssl_context
         self.params = dict()
@@ -191,6 +221,7 @@ class Task():
             logger.error(
                 "There were API format exceptions. API data was dropped! See %s", filepath)
 
+    # FIXME: Remove or fix this method. It refers to attributes that do not exist
     async def get_test_data(self, path:str, date: datetime.date=None) -> list[dict]:
         """Return test fixture data for the specified API path.
 
@@ -213,10 +244,12 @@ class Task():
             JSON API response as kept the corresponding test-fixture file.
         """
         # Set the test JSON data path on how the path argument matches the API paths
+        # FIXME: This attribute doe not exist
         filename = self.TEST_DATA_FILENAME_DICT[path]
         # Process the data date
         if date is not None:
             filename = filename.format(date_string=date.strftime("%Y-%m-%d"))
+        # FIXME: This attribute doe not exist
         filepath = os.path.join(self.TEST_FIXTURES_PATH, filename)
         # Read the test JSON from the TEST_JSON_PATH directory and convert to a
         # dict.
@@ -269,33 +302,57 @@ class Task():
                         # Set the exception as the response
                         self.response = ex
                     else:
+                        # Got JSON data
                         logger.info(f"Completed (try={retry}), url={full_url}")
+                        # TODO: We should examine the JSON records for error messages and respond accordingly and only then release the data
                         json_records = json_records["data"]
                         self.json_records = json_records
         except Exception as ex:
             # Set the exception as the response
             self.response = ex
         else:
-            # Format the data items listing any exceptions by calling the subclass'
-            # formatter method.
-            results_records, exception_records = self.map_formatter(self.formatter, json_records)
+            # Validate the models data
+            # TODO: Use the validator class to validate the data
+            json_validator = self.validator_class()
+            results_records, exception_records = json_validator.validate(json_records)
             # If there are exceptions then dump them to a datetime stamped file on disk
             Task.dump_exception_list(self.__class__.__name__, exception_records)
             self.exception_records = exception_records
 
             # Return the formatted data the appropriate table class.
+            # TODO: Instead use the validator class to format the data into the full universe of possible columns despite the JSON 'type' field.
             self.response = self.table_class(pd.DataFrame(results_records))
 
 
 class ModelsTask(Task):
-    """A task to fetch model data from the Finworks API."""
+    """A task to fetch model data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``ModelsValidator`` and
+    ``ModelsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+        Additional keyword arguments to pass to the parent class.
+
+    """
 
     PATH = "/api/modelmanager/model-portfolios"
     TEST_DATA_FILENAME = "models.json"
 
-    def __init__(self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
+    def __init__(
+        self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, ModelsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, ModelsFrame, ModelsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
@@ -318,14 +375,35 @@ class ModelsTask(Task):
         return item
 
 class InstrumentsTask(Task):
-    """A task to fetch instrument data from the Finworks API."""
+    """A task to fetch instrument data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``InstrumentsValidator`` and
+    ``InstrumentsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+        Additional keyword arguments to pass to the parent class.
+
+    """
+
+
 
     PATH = "/api/modelmanager/instruments"
     TEST_DATA_FILENAME = "instruments.json"
 
     def __init__(self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, InstrumentsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, InstrumentsFrame, InstrumentsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
@@ -343,14 +421,32 @@ class InstrumentsTask(Task):
         return item
 
 class InvestorsTask(Task):
-    """A task to fetch investor data from the Finworks API."""
+    """A task to fetch investor data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``InvestorsValidator`` and
+    ``InvestorsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+
+    """
 
     PATH = "/api/modelmanager/investors"
     TEST_DATA_FILENAME = "investors.json"
 
     def __init__(self, url: str, headers: dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, InvestorsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, InvestorsFrame, InvestorsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
@@ -386,7 +482,23 @@ class InvestorsTask(Task):
 
 
 class PositionsTask(Task):
-    """A task to fetch position data from the Finworks API."""
+    """A task to fetch position data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``PositionsValidator`` and
+    ``PositionsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+
+    """
 
     PATH = "/api/modelmanager/holdings"
     TEST_DATA_FILENAME = "positions_{date_string}.json"
@@ -396,7 +508,9 @@ class PositionsTask(Task):
         # Check the date keyword argument argument is present
         if "date" not in kwargs:
             raise ValueError("The date keyword argument is required.")
-        super().__init__(url, self.PATH, PositionsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, PositionsFrame, PositionsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
@@ -459,7 +573,22 @@ class PositionsTask(Task):
         return item
 
 class TransactionsTask(Task):
-    """A task to fetch transaction data from the Finworks API."""
+    """A task to fetch transaction data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``TransactionsValidator`` and
+    ``TransactionsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+    """
 
     PATH = "/api/modelmanager/transactions"
     TEST_DATA_FILENAME = "transactions_{date_string}.json"
@@ -469,7 +598,9 @@ class TransactionsTask(Task):
         # Check the date keyword argument argument is present
         if "date" not in kwargs:
             raise ValueError("The date keyword argument is required.")
-        super().__init__(url, self.PATH, TransactionsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, TransactionsFrame, TransactionsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
@@ -619,6 +750,7 @@ class APIClient(object):
         """Add a task to the task list."""
         if not issubclass(task, Task):
             ValueError("The task argument must be a subclass of the Task class.")
+        # Instantiate the `Task` object and append it to the task list
         task_obj = task(self.url, self.headers, self.ssl_context, **kwargs)
         self.tasks_list.append(task_obj)
 

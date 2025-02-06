@@ -37,12 +37,11 @@ class JSONValidator:
     # Define keys to rename if any
     KEYS_TO_RENAME = {}
 
-    def __init__(self, json_file):
-        self.json_file = json_file
-        self.exceptions = []
+    def __init__(self):
+        pass
 
-    def load_json(self):
-        with open(self.json_file, 'r') as file:
+    def load_json(self, json_file):
+        with open(json_file, 'r') as file:
             return json.load(file)
 
     def validate_key_value(self, item, path, exceptions, key, value):
@@ -95,26 +94,27 @@ class JSONValidator:
             return ", ".join([f"{key}={item.get(key, 'N/A')}" for key in self.IDENTITY_KEYS])
 
         cleaned_data = []
+        exceptions = []
         for item in data:
             identity = construct_identity(item)
             item_exceptions = self.validate_item(item, self.STRUCTURE_AND_TYPES)
             if item_exceptions:
-                self.exceptions.append(f"Item identity: ({identity}):")
-                self.exceptions.extend(item_exceptions)
+                exceptions.append(f"Item identity: ({identity}):")
+                exceptions.extend(item_exceptions)
             rename_keys(item, self.KEYS_TO_RENAME)
             drop_keys(item, self.KEYS_TO_DROP)
             cleaned_data.append(item)
 
-        return cleaned_data
+        return cleaned_data, exceptions
 
-    def validate_file(self):
+    def validate_file(self, file_name):
         try:
-            data = self.load_json()
-            cleaned_data = self.validate_and_clean(data)
-            if self.exceptions:
+            data = self.load_json(file_name)
+            cleaned_data, exceptions = self.validate_and_clean(data)
+            if exceptions:
                 log_file_name = f"validation_exceptions_{self.NAME}.log"
                 with open(log_file_name, "w") as log_file:
-                    log_file.write("\n".join(self.exceptions))
+                    log_file.write("\n".join(exceptions))
                 raise ValueError(f"Validation errors encountered. Check '{log_file_name}'.")
             return cleaned_data
         except Exception as e:
@@ -272,7 +272,7 @@ class SpecialTypeValidator(JSONValidator):
         else:
             exceptions.append(f"- {path}{key}: Missing key")
 
-class HoldingsValidator(SpecialTypeValidator):
+class PositionsValidator(SpecialTypeValidator):
     NAME = "holdings"
     IDENTITY_KEYS = ["Client account id", "Contract id", "Instrument id"]
     STRUCTURE_AND_TYPES = {
@@ -392,16 +392,16 @@ class TransactionsValidator(SpecialTypeValidator):
 
 if __name__ == "__main__":
     validators = [
-        (ModelsValidator("models.json"), "validated_models.json"),
-        (InstrumentsValidator("instruments.json"), "validated_instruments.json"),
-        (InvestorsValidator("investors.json"), "validated_investors.json"),
-        (HoldingsValidator("holdings-2023-12-14.json"), "validated_holdings.json"),
-        (TransactionsValidator("transactions-2023-12-14.json"), "validated_transactions.json"),
+        (ModelsValidator(), "models.json", "validated_models.json"),
+        (InstrumentsValidator(), "instruments.json", "validated_instruments.json"),
+        (InvestorsValidator(), "investors.json", "validated_investors.json"),
+        (PositionsValidator(), "holdings-2023-12-14.json", "validated_holdings.json"),
+        (TransactionsValidator(), "transactions-2023-12-14.json", "validated_transactions.json"),
     ]
 
-    for validator, output_file in validators:
+    for validator, input_file, output_file in validators:
         try:
-            validated_data = validator.validate_file()
+            validated_data = validator.validate_file(input_file)
             with open(output_file, "w") as file:
                 json.dump(validated_data, file, indent=4)
             print(f"Validation and cleaning successful. Cleaned data saved to {output_file}.")
