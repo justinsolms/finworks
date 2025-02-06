@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import os
 
@@ -45,6 +46,11 @@ class JSONValidator:
             return json.load(file)
 
     def validate_key_value(self, item, path, exceptions, key, value):
+        """Validate key-value pairs in the JSON data set.
+
+        Together with the ``validate_item`` method, this method will recursively
+        validate the JSON data set.
+        """
         if key in item:
             if isinstance(value, dict):
                 exceptions.extend(self.validate_item(item[key], value, path + key + "."))
@@ -57,6 +63,11 @@ class JSONValidator:
             exceptions.append(f"- {path}{key}: Missing key")
 
     def validate_item(self, item, structure, path=""):
+        """Validate a single item in the JSON data set.
+
+        Together with the ``validate_key_value`` method, this method will
+        recursively validate the JSON data set.
+        """
         exceptions = []
         if isinstance(structure, dict):
             for key, value in structure.items():
@@ -67,6 +78,22 @@ class JSONValidator:
         return exceptions
 
     def validate_and_clean(self, data):
+        """Validate and clean the JSON data set.
+
+        This method together with the called methods will validate the JSON data
+        set and clean it inplace by recursive methods to reach all nested
+        dictionaries.
+
+        Parameters
+        ----------
+        data : list
+            The JSON data set to validate and clean.
+
+        Warning
+        -------
+        This method and its called methods will modify inplace the all the
+        original data. Use deepcopy if you need to preserve the original data.
+        """
 
         def rename_keys(item, rename_map):
             if isinstance(item, dict):
@@ -120,20 +147,26 @@ class JSONValidator:
         except Exception as e:
             raise e
 
-    def flatten_dict(self, d, parent_key='', sep='_'):
+    def flatten_dict(self, data, parent_key='', sep='_'):
         """Flatten a nested dictionary iteratively.
 
         Parameters
         ----------
-        d : dict
+        data : dict
             The dictionary to flatten.
         parent_key : str, optional
             The parent key for the current dictionary, by default ''.
         sep : str, optional
             The separator to use between keys, by default '_'.
+
+        Warning
+        -------
+        This method will mangle input data. Use deepcopy if you need to preserve
+        the original data.
+
         """
         items = []
-        for k, v in d.items():
+        for k, v in data.items():
             new_key = parent_key + sep + k if parent_key else k
             if isinstance(v, dict):
                 items.extend(self.flatten_dict(v, new_key, sep=sep).items())
@@ -142,7 +175,13 @@ class JSONValidator:
         return dict(items)
 
     def flatten_data(self, data):
-        """Flatten to a columnar format suitable for the first normal form."""
+        """Flatten to a columnar format suitable for the first normal form.
+
+        Warning
+        -------
+        This method will mangle input data. Use deepcopy if you need to preserve
+        the original data.
+        """
         flattened_data = []
         for item in data:
             flattened_data.append(self.flatten_dict(item))
@@ -170,7 +209,7 @@ class ModelsValidator(JSONValidator):
         "Splits": "splits",
         "Instrument id": "instrument_id",
         "Split": "split",
-        "Code": "code",
+        "Code": "model_ticker",
         "Model portfolio id": "model_portfolio_id",
         "Name": "name",
     }

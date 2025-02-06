@@ -1,7 +1,7 @@
 """Finworks API data fetch, re-forming (joining) and caching."""
 from __future__ import annotations
 
-from copy import copy
+from copy import copy, deepcopy
 import json
 import os
 import logging
@@ -304,23 +304,29 @@ class Task():
                         # Got JSON data
                         logger.info(f"Completed (try={retry}), url={full_url}")
                         # TODO: We should examine the JSON records for error messages and respond accordingly and only then release the data
-                        json_records = json_records["data"]
-                        self.json_records = json_records
+                        self.json_records = json_records["data"]
         except Exception as ex:
             # Set the exception as the response
             self.response = ex
         else:
             # Validate the models data
             json_validator = self.validator_class()
-            results_records, exception_records = json_validator.validate(json_records)
+            # Use a deep copy of the json_records to avoid modifying the original
+            json_records = deepcopy(self.json_records)
+            results_records, exception_records = json_validator.validate_and_clean(json_records)
+
+            # Flatten the JSON records into a flat, non-nested format that is
+            # suitable for a columnar first normal form DataFrame table.
+            # Warning: the flatten_data method modifies the original data.
+            flattened_records = json_validator.flatten_data(results_records)
+
+            # Return the formatted data the appropriate table class.
+            import ipdb; ipdb.set_trace()
+            self.response = self.table_class(pd.DataFrame(flattened_records))
+
             # If there are exceptions then dump them to a datetime stamped file on disk
             Task.dump_exception_list(self.__class__.__name__, exception_records)
             self.exception_records = exception_records
-
-            # Return the formatted data the appropriate table class.
-            # TODO: Instead use the validator class to format the data into the full universe of possible columns despite the JSON 'type' field.
-            self.response = self.table_class(pd.DataFrame(results_records))
-
 
 class ModelsTask(Task):
     """A task to fetch model data from the Finworks API.
@@ -673,6 +679,21 @@ class TransactionsTask(Task):
 class APIClient(object):
     """A class to asynchronously fetch data from the Finworks API.
 
+    The ``fetch`` method will loop through the task list, awaiting the
+    ``tasker`` method for each ``Task`` child class object in the task list
+    complete the task list. Completed tasks are removed from the list. The list
+    is populated with the ``add_task`` method. The task in the list are each
+    populated with the respective responses or exceptions upon their completion.
+    Tasks left over in the list will be retried until all tasks are complete and
+    the tasks list is empty or the retry limit is reached.
+
+    The ``Task`` child classes are responsible for the getting of the data
+    from the API and the formatting of the data into a DataFrame. The
+    ``Task`` child classes are also responsible for the validation of the
+    data using special ``finworks_validator.JSONValidator`` child classes.
+
+
+
     Parameters
     ----------
     test_url : str, optional
@@ -744,7 +765,7 @@ class APIClient(object):
         for task in self.tasks_list:
             print(task)
 
-    def add_task(self, task: object, **kwargs) -> None:
+    def add_task(self, task: Task, **kwargs) -> None:
         """Add a task to the task list."""
         if not issubclass(task, Task):
             ValueError("The task argument must be a subclass of the Task class.")
@@ -778,7 +799,13 @@ class APIClient(object):
         return responses_list
 
     def fetch(self, return_tasks: bool=False):
-        """Fetch data from the Finworks API.
+        """Fetch data from the Finworks API with retry logic.
+
+        Will try to complete tasks in the task list. If a task fails then it
+        will be retried according to the retry list. If the task fails on the
+        last retry then the task will be marked as failed and the exception
+        will be stored in the task object. The task list will be reset to empty
+        before the method returns.
 
         Parameters
         ----------
@@ -1784,12 +1811,14 @@ class CollectJSONResponses(object):
             api_client.add_task(InstrumentsTask)
             api_client.add_task(InvestorsTask)
             results_list = api_client.fetch(return_tasks=True)
+            # Note we keep only the JSON records, not the processed data
             results_list = [result.json_records for result in results_list]
             models, instruments, investors = results_list
         if time_series is True:
             api_client.add_task(PositionsTask, date=self.collection_date)
             api_client.add_task(TransactionsTask, date=self.collection_date)
             results_list = api_client.fetch(return_tasks=True)
+            # Note we keep only the JSON records, not the processed data
             results_list = [result.json_records for result in results_list]
             positions, transactions = results_list
 
