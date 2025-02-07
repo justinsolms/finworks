@@ -313,7 +313,7 @@ class Task():
             json_validator = self.validator_class()
             # Use a deep copy of the json_records to avoid modifying the original
             json_records = deepcopy(self.json_records)
-            results_records, exception_records = json_validator.validate_and_clean(json_records)
+            results_records, validation_exception_records = json_validator.validate_and_clean(json_records)
 
             # Flatten the JSON records into a flat, non-nested format that is
             # suitable for a columnar first normal form DataFrame table.
@@ -321,13 +321,17 @@ class Task():
             flattened_records = json_validator.flatten_data(results_records)
 
             # Map the formatter to the flattened records
-            flattened_records, exception_list = self.map_formatter(self.formatter, flattened_records)
+            formatted_records, format_exception_list = self.map_formatter(self.formatter, flattened_records)
             # TODO: Bring exceptions to the attention of the user
 
             # Return the formatted data the appropriate table class.
-            data_frame = pd.DataFrame(flattened_records)
-            import ipdb; ipdb.set_trace()
-            self.response = self.table_class(data_frame)
+            data_frame = pd.DataFrame(formatted_records)
+            try:
+                self.response = self.table_class(data_frame)
+            except Exception as ex:
+                import ipdb; ipdb.set_trace()
+                pass
+
             # TODO: Bring exceptions to the attention of the user
 
             # If there are exceptions then dump them to a datetime stamped file on disk
@@ -368,7 +372,7 @@ class ModelsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        item.pop("spit_type")
+        item.pop("split_type")
         item["value"] = item.pop("split_value")
         return item
 
@@ -903,6 +907,9 @@ class BaseFrame(ABC):
         """Return the string representation of the object."""
         return f"{self.__class__.__name__}(data=\n{self.data!r}, merged={self.merged})"
 
+    def test_columns_equal(self, columns):
+        return set(self.data.columns) == set(columns)
+
     @abstractmethod
     def data_mods(self):
         """Modifications to the data before it is passed to the DataFrame.
@@ -992,10 +999,10 @@ class ModelsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.tolist() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in data.")
         else:
-            if self.data.columns.tolist() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in data.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
@@ -1105,10 +1112,10 @@ class InstrumentsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if 'proxy_isin' in self.data.columns:
-            if self.data.columns.tolist() != self.COLUMNS + ['proxy_isin']:
+            if not self.test_columns_equal(self.COLUMNS + ['proxy_isin']):
                 raise ValueError("Unexpected columns in data.")
         else:
-            if self.data.columns.tolist() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in data.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
@@ -1179,10 +1186,10 @@ class InvestorsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in response DataFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in response DataFrame.")
         if self.data["client_account_id"].isnull().values.any():
             raise ValueError("Missing values in client_account_id.")
@@ -1402,10 +1409,10 @@ class PositionsFrame(TimeSeriesFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in response DataFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in response DataFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
@@ -1569,10 +1576,10 @@ class TransactionsFrame(TimeSeriesFrame):
         if self.data.empty:
             pass  # Okay to be no transactions
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in response DataFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in response DataFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
