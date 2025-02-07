@@ -300,7 +300,9 @@ class SpecialTypeValidator(JSONValidator):
         """
         if key in item:
             if isinstance(value, dict):
-                if "type" in item[key]:
+                if item[key] is None:
+                    exceptions.append(f"- {path}{key}: Expected {type(value)}, got {type(item[key])}")
+                elif "type" in item[key]:
                     type_key = item[key]["type"]
                     if type_key not in value:
                         exceptions.append(f"- {path}{key}: Invalid type key")
