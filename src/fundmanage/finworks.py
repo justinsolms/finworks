@@ -2258,10 +2258,10 @@ class ClientInterface(object):
             this argument is provided then the `from_date` and `to_date`
             arguments are ignored and the `from_date` and `to_date` are set to
             the same date as the `date` argument.
-        from_date : datetime.date
+        from_date : datetime.date, optional
             Date from when, and including, when transaction are required.
             If none provided the date shall default to 1900-01-01.
-        to_date : datetime.date
+        to_date : datetime.date, optional
             Date to, and including, when transaction are required. Note that
             data will run until close of the day so _today_ will not be
             available until after day close, probably closer to midnight.
@@ -2279,14 +2279,17 @@ class ClientInterface(object):
         TransactionsFrame
             Investor account transactions
         """
-        # Check date arguments
+        # Check date arguments and if no date arguments are provided then use
+        # default dates of 1900-01-01 to today.
         if date is not None:
             from_date = date
             to_date = date
         else:
-            if not from_date or not to_date:
-                raise ValueError(
-                    "Either date or both from_date and to_date must be provided.")
+            if from_date is not None and to_date is not None:
+                pass
+            else:
+                from_date = datetime.date(1900, 1, 1)
+                to_date = datetime.date.today()
 
         # Sanity check dates
         from_date, to_date = check_dates(from_date, to_date)
@@ -2333,15 +2336,15 @@ class ClientInterface(object):
             this argument is provided then the `from_date` and `to_date`
             arguments are ignored and the `from_date` and `to_date` are set to
             the same date as the `date` argument.
-        from_date : datetime.date
+        from_date : datetime.date, optional
             Date from when, and including, when transaction are required.
             If none provided the date shall default to 1900-01-01.
-        to_date : datetime.date
+        to_date : datetime.date, optional
             Date to, and including, when transaction are required. Note that
             data will run until close of the day so _today_ will not be
             available until after day close, probably closer to midnight.
             If none provided the date shall default to today.
-        verify_integrity : bool
+        verify_integrity : bool, optional
             If True, then check that the data is consistent and complete. If
             False, skip the integrity check. Skipping the integrity check can
             improve performance but may result in inconsistent or incomplete
@@ -2359,14 +2362,17 @@ class ClientInterface(object):
         --------
         Data
         """
-        # Check date arguments
+        # Check date arguments and if no date arguments are provided then use
+        # default dates of 1900-01-01 to today.
         if date is not None:
             from_date = date
             to_date = date
         else:
-            if not from_date or not to_date:
-                raise ValueError(
-                    "Either date or both from_date and to_date must be provided.")
+            if from_date is not None and to_date is not None:
+                pass
+            else:
+                from_date = datetime.date(1900, 1, 1)
+                to_date = datetime.date.today()
 
         # Sanity check dates
         from_date, to_date = check_dates(from_date, to_date)
