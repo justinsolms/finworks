@@ -1746,7 +1746,7 @@ class CollectJSONResponses(object):
                     positions = positions[0:number]
                 positions_json = json.dumps(positions, indent=4)
                 date_string = self.collection_date.strftime("%Y-%m-%d")
-                positions_path = get_output_path(f"positions-{date_string}.json")
+                positions_path = get_output_path(f"holdings-{date_string}.json")
                 with open(positions_path, "w") as f:
                     f.write(positions_json)
                     logger.info(f"Wrote {len(positions)} item(s) to {positions_path}.")
