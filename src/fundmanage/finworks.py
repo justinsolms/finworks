@@ -1664,7 +1664,7 @@ class CollectJSONResponses(object):
         the number is ignored. Defaults to 1.
     basics : bool, optional
         If True then collect basic data. If False then do not collect basics
-        data.
+        data. Defaults to True.
     time_series : bool, optional
         If True then collect time series data. If False then collect only the
         basics data. Defaults to True.
@@ -1702,71 +1702,71 @@ class CollectJSONResponses(object):
         models, instruments, investors, positions, transactions = self.collect(
             basics, time_series)
 
-        # Log lengths
+        # Convert to json strings and dump to JSON text files with pretty
+        # formatting.
         if basics:
-            logger.info("Got %s instrument(s).", len(instruments))
-            logger.info("Got %s investor(s).", len(investors))
-            logger.info("Got %s model(s).", len(models))
-        if time_series:
-            logger.info("Got %s position(s).", len(positions))
-            if transactions is not None:
-                logger.info("Got %s transaction(s).", len(transactions))
+            if models is not None:
+                if simple:
+                    models = models[0:number]
+                models_json = json.dumps(models, indent=4)
+                models_path = get_output_path("models.json")
+                with open(models_path, "w") as f:
+                    f.write(models_json)
+                    logger.info(f"Wrote {len(models)} item(s) to {models_path}.")
             else:
-                logger.info("No transactions found.")
+                logger.warning("No models data received.")
 
-        # Decide what to keep
-        if simple:
-            n = number
-            logger.info(f"Keeping only first {n} item(s) in each list.")
-            # Keep only fist n items in each list
-            models = models[0:n]
-            instruments = instruments[0:n]
-            investors = investors[0:n]
-            positions = positions[0:n]
-            if transactions is not None:
-                transactions = transactions[0:n]
+            if instruments is not None:
+                if simple:
+                    instruments = instruments[0:number]
+                instruments_json = json.dumps(instruments, indent=4)
+                instruments_path = get_output_path("instruments.json")
+                with open(instruments_path, "w") as f:
+                    f.write(instruments_json)
+                    logger.info(f"Wrote {len(instruments)} item(s) to {instruments_path}.")
+            else:
+                logger.warning("No instruments data received.")
+
+            if investors is not None:
+                if simple:
+                    investors = investors[0:number]
+                investors_json = json.dumps(investors, indent=4)
+                investors_path = get_output_path("investors.json")
+                with open(investors_path, "w") as f:
+                    f.write(investors_json)
+                    logger.info(f"Wrote {len(investors)} item(s) to {investors_path}.")
+            else:
+                logger.warning("No investors data received.")
 
         # Convert to json strings and dump to JSON text files with pretty
         # formatting.
-        # BUG: The models, etc., are BaseFrame objects, not dicts.
-        if basics:
-            models_json = json.dumps(models, indent=4)
-            instruments_json = json.dumps(instruments, indent=4)
-            investors_json = json.dumps(investors, indent=4)
         if time_series:
-            positions_json = json.dumps(positions, indent=4)
-            if transactions is not None:
-                transactions_json = json.dumps(transactions, indent=4)
+            if positions is not None:
+                if simple:
+                    positions = positions[0:number]
+                positions_json = json.dumps(positions, indent=4)
+                date_string = self.collection_date.strftime("%Y-%m-%d")
+                positions_path = get_output_path(f"positions-{date_string}.json")
+                with open(positions_path, "w") as f:
+                    f.write(positions_json)
+                    logger.info(f"Wrote {len(positions)} item(s) to {positions_path}.")
             else:
-                transactions_json = None
+                logger.warning("No positions data received.")
 
-        # Write to files
-        if basics:
-            models_path = get_output_path("models.json")
-            instruments_path = get_output_path("instruments.json")
-            investors_path = get_output_path("investors.json")
-            with open(models_path, "w") as f:
-                f.write(models_json)
-                logger.info(f"Wrote {len(models)} item(s) to {models_path}.")
-            with open(instruments_path, "w") as f:
-                f.write(instruments_json)
-                logger.info(f"Wrote {len(instruments)} item(s) to {instruments_path}.")
-            with open(investors_path, "w") as f:
-                f.write(investors_json)
-                logger.info(f"Wrote {len(investors)} item(s) to {investors_path}.")
-        if time_series:
-            date_string = self.collection_date.strftime("%Y-%m-%d")
-            holdings_path = get_output_path(f"holdings-{date_string}.json")
-            transactions_path = get_output_path(f"transactions-{date_string}.json")
-            with open(holdings_path, "w") as f:
-                f.write(positions_json)
-                logger.info(f"Wrote {len(positions)} item(s) to {holdings_path}.")
-            if transactions_json is not None:
+            if transactions is not None:
+                if simple:
+                    transactions = transactions[0:number]
+                transactions_json = json.dumps(transactions, indent=4)
+                transactions_path = get_output_path(f"transactions-{date_string}.json")
                 with open(transactions_path, "w") as f:
                     f.write(transactions_json)
                     logger.info(f"Wrote {len(transactions)} item(s) to {transactions_path}.")
             else:
-                logger.info("No transactions found. No file written.")
+                logger.warning("No transactions data received.")
+
+        # Log warning of data loss
+        if simple:
+            logger.warning(f"Kept only first {number} item(s) in each list.")
 
     def collect(self, basics, time_series):
         """Collect JSON responses as strings."""
