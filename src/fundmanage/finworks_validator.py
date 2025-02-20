@@ -2,6 +2,8 @@ from copy import deepcopy
 import json
 import os
 
+import pandas as pd
+
 class JSONValidator:
     """Base class for JSON validation and cleaning.
 
@@ -58,9 +60,9 @@ class JSONValidator:
                 for i, sub_item in enumerate(item[key]):
                     exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
             elif not isinstance(item[key], value):
-                exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
+                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {value}, got {type(item[key])}"})
         else:
-            exceptions.append(f"- {path}{key}: Missing key")
+            exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
 
     def validate_item(self, item, structure, path=""):
         """Validate a single item in the JSON data set.
@@ -74,7 +76,7 @@ class JSONValidator:
                 self.validate_key_value(item, path, exceptions, key, value)
         else:
             if not isinstance(item, structure):
-                exceptions.append(f"- {path}: Expected {structure}, got {type(item)}")
+                exceptions.append({"Key": f"{path}", "Issue": f"Expected {structure}, got {type(item)}"})
         return exceptions
 
     def validate_and_clean(self, data):
@@ -118,7 +120,9 @@ class JSONValidator:
                     drop_keys(sub_item, keys_to_drop)
 
         def construct_identity(item):
-            return ", ".join([f"{key}={item.get(key, 'N/A')}" for key in self.IDENTITY_KEYS])
+            """Construct the item identity as a dict of key-value pairs."""
+            # Return N/A for missing keys
+            return {key: item.get(key, "N/A") for key in self.IDENTITY_KEYS}
 
         cleaned_data = []
         exceptions = []
@@ -126,7 +130,8 @@ class JSONValidator:
             identity = construct_identity(item)
             item_exceptions = self.validate_item(item, self.STRUCTURE_AND_TYPES)
             if item_exceptions:
-                exceptions.append(f"Item identity: ({identity}):")
+                # Construct a list of dict for each item exception with the item identity
+                item_exceptions = [{**identity, **exception} for exception in item_exceptions]
                 exceptions.extend(item_exceptions)
             rename_keys(item, self.KEYS_TO_RENAME)
             drop_keys(item, self.KEYS_TO_DROP)
@@ -139,9 +144,9 @@ class JSONValidator:
             data = self.load_json(file_name)
             cleaned_data, exceptions = self.validate_and_clean(data)
             if exceptions:
-                log_file_name = f"validation_exceptions_{self.NAME}.log"
-                with open(log_file_name, "w") as log_file:
-                    log_file.write("\n".join(exceptions))
+                log_file_name = f"validation_exceptions_{self.NAME}.csv"
+                exceptions_table = pd.DataFrame(exceptions)
+                exceptions_table.to_csv(log_file_name, index=False)
                 raise ValueError(f"Validation errors encountered. Check '{log_file_name}'.")
             return cleaned_data
         except Exception as e:
@@ -340,11 +345,11 @@ class SpecialTypeValidator(JSONValidator):
         if key in item:
             if isinstance(value, dict):
                 if item[key] is None:
-                    exceptions.append(f"- {path}{key}: Expected {type(value)}, got {type(item[key])}")
+                    exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
                 elif "type" in item[key]:
                     type_key = item[key]["type"]
                     if type_key not in value:
-                        exceptions.append(f"- {path}{key}: Invalid type key")
+                        exceptions.append({"Key": f"{path}{key}", "Issue": f"Invalid type key"})
                         return
                     item_key = item[key]
                     type_structure = value[type_key]
@@ -355,9 +360,9 @@ class SpecialTypeValidator(JSONValidator):
                 for i, sub_item in enumerate(item[key]):
                     exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
             elif not isinstance(item[key], value):
-                exceptions.append(f"- {path}{key}: Expected {value}, got {type(item[key])}")
+                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {value}, got {type(item[key])}"})
         else:
-            exceptions.append(f"- {path}{key}: Missing key")
+            exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
 
 
 class PositionsValidator(SpecialTypeValidator):
@@ -490,11 +495,12 @@ if __name__ == "__main__":
     for validator, input_file, output_file in validators:
         try:
             validated_data = validator.validate_file(input_file)
+        except ValueError as e:
+            print(e)
+        else:
             flattened_data = validator.flatten_data(validated_data)
             with open(output_file, "w") as file:
                 json.dump(flattened_data, file, indent=4)
             print(f"Validation and cleaning successful. Cleaned data saved to {output_file}.")
-        except ValueError as e:
-            print(e)
 
 # NOTE: All tests pass for 2023-12-14 data set.
