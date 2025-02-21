@@ -521,6 +521,14 @@ class PositionsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
+        # Drop unwanted fields
+        # TODO: Check the fields that are dropped against kept fields for equality
+        item.pop("market_value_type")
+        item.pop("market_value_currency")
+        item.pop("price_type")
+        item.pop("price_currency")
+        item.pop("price_instrument_id")
+        item.pop("units_instrument_id")
         # Convert ID integers fields to str
         item["contract_id"] = str(item["contract_id"])
         item["client_account_id"] = str(item["client_account_id"])
@@ -571,6 +579,15 @@ class TransactionsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
+        # Drop unwanted fields
+        # TODO: Check the fields that are dropped against kept fields for equality
+        item.pop("instrument_account_number")
+        item.pop("amount_type")
+        item.pop("price_type")
+        item.pop("price_currency")
+        item.pop("price_instrument_id")
+        item.pop("units_type")
+        item.pop("units_currency")
         # Convert ID integers fields to str
         item["transaction_id"] = str(item["transaction_id"])
         item["contract_id"] = str(item["contract_id"])
@@ -578,10 +595,10 @@ class TransactionsTask(Task):
         item["instrument_id"] = str(item["model_portfolio_id"])
         # Nested status fields that were flattened by the InvestorsValidator
         item["type"] = item.pop("units_type")
-        item["currency"] = item.pop("market_value_currency")
+        item["currency"] = item.pop("amount_currency")
         item["price"] = float(item.pop("price_value"))
         item["units"] = float(item.pop("units_value"))
-        item["value"] = float(item.pop("market_value_value"))
+        item["value"] = float(item.pop("amount_value"))
         # Convert date strings to date object
         item["date"] = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
         item["processed_date"] = datetime.datetime.strptime(item["processed_date"], "%Y-%m-%d").date()
