@@ -26,7 +26,7 @@ from src.fundmanage import get_certificates_path, get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
+from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, APIError
 from src.fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from src.fundmanage.finworks import PositionsTask, TransactionsTask
 from src.fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
@@ -93,7 +93,7 @@ class TestAuthentication(unittest.TestCase):
                         # We got a response but it was not JSON
                         text = await response.text()
                         # Set the exception as the response
-                        raise FinworksAPIError(
+                        raise APIError(
                             f"{ex.message}, url={ex.request_info.url}\n"
                             f"Text received was:\n"
                             f"{text}")
