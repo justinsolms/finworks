@@ -28,6 +28,7 @@ from fundmanage.finworks_validator import InvestorsValidator
 from fundmanage.finworks_validator import PositionsValidator, TransactionsValidator
 
 from fundmanage import get_certificates_path, get_data_path, get_output_path
+from fundmanage.utils import url_to_filename
 from .funds import FundsList
 from abc import ABC, abstractmethod
 
@@ -159,7 +160,7 @@ class Task():
         self.response = Exception("There were not any valid API response yet.")
         # None responses indicating that the data is not yet fetched or was not
         # successfully fetched
-        self.exception_records = None
+        self.format_exceptions_list = None
         self.json_records = None
 
         # Construct the full URL with the path and parameters for logging purposes
@@ -222,7 +223,7 @@ class Task():
         An example would be TimeOutError, ContentTypeError, etc.
 
         """
-        return not isinstance(self.response, BaseException)
+        return not isinstance(self.response, BaseException) and isinstance(self.response, self.table_class)
 
     async def get(self, session: aiohttp.ClientSession, retry: int) -> BaseFrame:
         """Fetch data from the Finworks API."""
@@ -230,67 +231,124 @@ class Task():
         url_path = self.url_path
         full_url = self.full_url
         try:
-            logger.debug(f"Getting (try={retry}), url={full_url}")
+            logger.debug(f"Session.get (try={retry}), url={full_url}")
             async with session.get(url_path, params=self.params,
                                    headers=self.headers, ssl=self.ssl_context
                                    ) as response:
-                if response.status != 200:
-                    msg = f"Failed response {response.status} from {full_url}"
-                    logger.error(msg)
+                if 400 <= response.status < 500:
+                    # We got a response in the 400 range and we expect a JSON
+                    # error message
+                    text = await response.json()
                     # Set the exception as the response
-                    self.response = FinworksAPIError(msg)
-                else:
+                    ex = APIError(
+                        f"Unexpected response status={response.status} from {full_url}\n"
+                        f"Text received was:\n"
+                        f"{text}")
+                    logger.error("Unexpected response", exc_info=ex)
+                    self.response = ex
+                elif 500 <= response.status < 600:
+                    # We got a response in the 500 range and the response is
+                    # undefined
+                    ex = APIError(f"Undefined response status={response.status} from {full_url}")
+                    logger.error("Undefined response", exc_info=ex)
+                    self.response = ex
+                elif response.status == 200:
                     try:
-                        logger.debug(f"Awaiting (try={retry}), url={full_url}")
+                        logger.debug(f"Awaiting content (try={retry}), url={full_url}")
                         json_records = await response.json()
                     except aiohttp.ContentTypeError as ex:
                         # We got a response but it was not JSON
                         text = await response.text()
                         # Set the exception as the response
-                        self.response = FinworksAPIError(
-                            f"{ex.message}, url={ex.request_info.url}\n"
+                        ex = APIError(
+                            f"ContentTypeError: {ex.message}, url={ex.request_info.url}\n"
                             f"Text received was:\n"
                             f"{text}")
+                        logger.error("ContentTypeError", exc_info=ex)
+                        self.response = ex
                     except Exception as ex:
-                        # Set the exception as the response
+                        # Unexpected exception
+                        logger.error("Unexpected exception awaiting response", exc_info=ex)
                         self.response = ex
                     else:
-                        # Got JSON data
-                        logger.info(f"Completed (try={retry}), url={full_url}")
-                        # TODO: We should examine the JSON records for error messages and respond accordingly and only then release the data
+                        # Got expected JSON data
+                        logger.info(f"Received content (try={retry}), url={full_url}")
+                        # Keep original JSON records for analysis, collection or
+                        # dumping, etc.
                         self.json_records = json_records["data"]
+                        # Validate the models data
+                        json_validator = self.validator_class()
+                        # Use a deep copy of the json_records to avoid modifying
+                        # the original
+                        json_records = deepcopy(self.json_records)
+                        results_records, validation_exceptions = json_validator.validate_and_clean(json_records)
+                        # If there are exceptions then dump them to file
+                        if validation_exceptions:
+                            # Get the date_stamp
+                            now = datetime.datetime.now()
+                            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
+                            # Dump the exceptions to a file
+                            path = get_data_path("finworks/exceptions")
+                            # If path does not exist then create it
+                            if not os.path.isdir(path):
+                                os.makedirs(path)
+                            # Format the url so it does not mangle the filename
+                            url_filename = url_to_filename(full_url)
+                            filename = f"{date_stamp}_validation_exceptions_{url_filename}.csv"
+                            filepath = os.path.join(path, filename)
+                            exceptions_table = pd.DataFrame(validation_exceptions)
+                            exceptions_table.to_csv(filepath, index=False)
+                            ex = JSONValidationError(f"Validation errors encountered. Check file '{filepath}'.")
+                            logger.error("Failed validation", exc_info=ex)
+                            self.response = ex
+                            return
+
+                        # Flatten the JSON records into a flat, non-nested format that is
+                        # suitable for a columnar first normal form DataFrame table.
+                        # Warning: the flatten_data method modifies the original data.
+                        flattened_records = json_validator.flatten_data(results_records)
+
+                        # Map the formatter to the flattened records
+                        formatted_records, format_exceptions = self.map_formatter(self.formatter, flattened_records)
+                        # If there are exceptions then dump them to file
+                        if format_exceptions:
+                            # Get the date_stamp
+                            now = datetime.datetime.now()
+                            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
+                            # Dump the exceptions to a file
+                            path = get_data_path("finworks/exceptions")
+                            # If path does not exist then create it
+                            if not os.path.isdir(path):
+                                os.makedirs(path)
+                            # Format the url so it does not mangle the filename
+                            url_filename = url_to_filename(full_url)
+                            filename = f"{date_stamp}_formatter_exceptions_{url_filename}.log"
+                            filepath = os.path.join(path, filename)
+                            with open(filepath, "wb") as f:
+                                f.write("\n".join(format_exceptions))
+                            ex = FormatterError(f"Validation errors encountered. Check file '{filepath}'.")
+                            logger.error("Failed formatting", exc_info=ex)
+                            self.response = ex
+                            return
+
+                        # Return the formatted data the appropriate table class.
+                        data_frame = pd.DataFrame(formatted_records)
+                        try:
+                            self.response = self.table_class(data_frame)
+                        except Exception as ex:
+                            logger.error("Failed to create `BaseFrame` child object", exc_info=ex)
+                            self.response = ex
+                            return
+                else:
+                    # We got some other response status code
+                    ex = APIError(f"Unexpected response, status={response.status} from {full_url}")
+                    logger.error("Unexpected response", exc_info=ex)
+                    self.response = ex
         except Exception as ex:
-            # Set the exception as the response
+            # Session.get exception
+            logger.error("Session.get exception", exc_info=ex)
             self.response = ex
-        else:
-            # Validate the models data
-            json_validator = self.validator_class()
-            # Use a deep copy of the json_records to avoid modifying the original
-            json_records = deepcopy(self.json_records)
-            results_records, validation_exception_records = json_validator.validate_and_clean(json_records)
 
-            # Flatten the JSON records into a flat, non-nested format that is
-            # suitable for a columnar first normal form DataFrame table.
-            # Warning: the flatten_data method modifies the original data.
-            flattened_records = json_validator.flatten_data(results_records)
-
-            # Map the formatter to the flattened records
-            formatted_records, format_exception_list = self.map_formatter(self.formatter, flattened_records)
-            # TODO: Bring exceptions to the attention of the user
-
-            # Return the formatted data the appropriate table class.
-            data_frame = pd.DataFrame(formatted_records)
-            try:
-                self.response = self.table_class(data_frame)
-            except Exception as ex:
-                import ipdb; ipdb.set_trace()
-                pass
-
-            # TODO: Bring exceptions to the attention of the user
-
-            # If there are exceptions then dump them to a datetime stamped file on disk
-            Task.dump_exception_list(self.__class__.__name__, exception_records)
-            self.exception_records = exception_records
 
 class ModelsTask(Task):
     """A task to fetch model data from the Finworks API.
