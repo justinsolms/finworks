@@ -384,8 +384,13 @@ class ModelsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
+        # Rename validator fields
         item.pop("split_type")
         item["value"] = item.pop("split_value")
+        # Convert ID integers fields to str
+        item["model_portfolio_id"] = str(item["model_portfolio_id"])
+        item["instrument_id"] = str(item["instrument_id"])
+
         return item
 
 class InstrumentsTask(Task):
@@ -423,15 +428,11 @@ class InstrumentsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Rename fields
-        item.pop("Instrument provider")
-        item.pop("Name")
-        item["isin"] = item.pop("ISIN Number")
-        item["instrument_id"] = item.pop("Instrument id")
-        item["ticker"] = item.pop("Code")
-        item["instrument_type"] = item.pop("Instrument type")
-        item["status"] = item.pop("Status")
-        item["currency"] = item.pop("Currency")
+        # Not in the spec and not in InstrumentsValidator.STRUCTURE_AND_TYPES
+        item.pop("Instrument provider unique id")
+        # Convert ID integers fields to str
+        item["instrument_id"] = str(item["instrument_id"])
+
         return item
 
 class InvestorsTask(Task):
@@ -466,32 +467,22 @@ class InvestorsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        item.pop("Policy number")
-        item.pop("Description")
-        item.pop("Product")
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        if "Account number" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Account number")
-        # Rename fields
-        item["client_account_id"] = item.pop("Client account id") # NOTE: This is not in the Finworks specification
-        item["contract_id"] = item.pop("Contract id")  # NOTE: Was old UUID
-        item["contract_number"] = item.pop("Contract number") # TODO: Rename to contract_number or portfolio_number
-        item["id_number"] = item.pop("Identification number")
-        item["model_portfolio_id"] = item.pop("Modelportfolio")
-        item["take_on_date"] = item.pop("Take On Date")
-        # Status
-        popped = item.pop("Status")
-        item["status"] = popped["identifier"]
-        # TODO: Make boolean
-        item["active"] = popped["active"]
-        # Capitalize names
-        name_str = item.pop("Investor name")
-        investor_names = [n.capitalize() for n in name_str.split(" ")]
-        item["name"] = " ".join(investor_names)
+        # Convert ID integers fields to str
+        item["client_account_id"] = str(item["client_account_id"])
+        item["contract_id"] = str(item["contract_id"])
+        item["model_portfolio_id"] = str(item["model_portfolio_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["status"] = item.pop("status_identifier")
+        item["active"] = item.pop("status_active")
+        # Make `active` boolean
+        if item["active"] in ["true", "True"]:
+            item["active"] = True
+        elif item["active"] in ["false", "False"]:
+            item["active"] = False
+        else:
+            raise ValueError(
+                "Expected string 'true'|'false' for the `active` field.")
+
         return item
 
 
@@ -530,60 +521,20 @@ class PositionsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        item.pop("Market Value in System Currency")
-        item.pop("Instrument account number")
-        # Renames
-        item["date"] = item.pop("Date")
-        item["contract_id"] = item.pop("Contract id") # TODO: Rename to contract_id
-        item["client_account_id"] = item.pop("Client account id")
-        item["instrument_id"] = item.pop("Instrument id")
-        # The market price. Assert it's fund currency as the  currency
-        # going forward. Assert the value going forward.
-        popped = item.pop("Market Value in Fund Currency")
-        assert (
-            popped["type"] == "Money"
-        ), "Positions market value in fund currency `type` must be `Money`."
-        currency = popped["currency"]
-        value = float(popped["value"])
-        # The `Price` field.
-        popped = item.pop("Latest available price")
-        assert popped["type"] == "Price", "Positions price type discrepancy."
-        assert (
-            popped["currency"] == currency
-        ), "Positions price currency discrepancy."
-        assert (
-            popped["Instrument id"] == item["instrument_id"]
-        ), "Positions instrument price instrument id discrepancy."
-        price = float(popped["value"])
-        # Get type and number of units
-        popped = item.pop("Units")
-        type_ = popped["type"]
-        if type_ == "Unit":
-            assert (
-                popped["Instrument id"] == item["instrument_id"]
-            ), "Positions units units instrument id discrepancy."
-            units = float(popped["value"])
-        elif type_ == "Money":
-            assert (
-                popped["currency"] == currency
-            ), "Positions units money currency discrepancy."
-            units = float(popped["value"])
-            price = 1.0
-        else:
-            raise Exception("Unexpected units type.")
-        assert round(value, 2) == round(
-            units * price, 2
-        ), "Positions price-units and value discrepancy"
-        item["type"] = type_
-        item["currency"] = currency
-        item["price_date"] = item.pop("Price date")
-        item["price"] = price
-        item["units"] = units
-        item["value"] = value
+        # Convert ID integers fields to str
+        item["contract_id"] = str(item["contract_id"])
+        item["client_account_id"] = str(item["client_account_id"])
+        item["instrument_id"] = str(item["model_portfolio_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["type"] = item.pop("units_type")
+        item["currency"] = item.pop("market_value_currency")
+        item["price"] = float(item.pop("price_value"))
+        item["units"] = float(item.pop("units_value"))
+        item["value"] = float(item.pop("market_value_value"))
+        # Convert date strings to date object
+        item["date"] = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
+        item["price_date"] = datetime.datetime.strptime(item["price_date"], "%Y-%m-%d").date()
+
         return item
 
 class TransactionsTask(Task):
@@ -620,69 +571,20 @@ class TransactionsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        item.pop("Instrument account number")
-        # Renames
-        item["date"] = item.pop("Date")
-        # Unique by transaction id
-        item["transaction_id"] = item.pop("Transaction id")
-        item["contract_id"] = item.pop("Contract id")
-        item["client_account_id"] = item.pop("Client account id")
-        item["instrument_id"] = item.pop("Instrument id")
-        item["is_cashflow"] = item.pop("Is Cashflow")
-        # Classification
-        item["type"] = item.pop("Type")
-        item["sub_type"] = item.pop("Sub type")
-        transact_id = item["transaction_id"]
-        instrument_id = item["instrument_id"]
-        # Assert the instrument id going forward.
-        # The `Amount` item. Assert it's currency as the transaction currency
-        # going forward.
-        popped = item.pop("Amount")
-        currency = popped["currency"]  # Transaction currency
-        assert (
-            popped["type"] == "Money"
-        ), f"Transaction value type discrepancy, TID={transact_id}."
-        value = float(popped["value"])  # Transaction value
-        # The `Units` item.
-        popped = item.pop("Units")
-        type_ = popped["type"]
-        if popped["type"] == "Money":
-            units = float(popped["value"])
-        elif popped["type"] == "Unit":
-            units = float(popped["value"])
-            assert (
-                popped["Instrument id"] == instrument_id
-            ), f"Transaction units instrument id discrepancy, TID={transact_id}."
-        else:
-            raise Exception("Unexpected units type.")
-        # The `Price` field. If the units type is `Money` then ignore checks
-        # as there are instrument_id discrepancies as pointed out by Otto -
-        # Finworks (email: Transaction price instrument id discrepancy, 27
-        # Aug 2021, 17:18)
-        popped = item.pop("Price")
-        if type_ != "Money" and popped is not None:
-            # assert popped['Instrument id'] == instrument_id, \
-            #     f'Transaction price instrument id discrepancy, TID={transact_id}.'
-            assert (
-                popped["currency"] == currency
-            ), f"Transaction price currency discrepancy, TID={transact_id}."
-            assert (
-                popped["type"] == "Price"
-            ), f"Transaction price type discrepancy, TID={transact_id}."
-            price = float(popped["value"])  # Transaction price
-        else:
-            price = 1.0
-        # Add fields to item
-        item["currency"] = currency
-        item["price"] = price
-        item["units"] = units
-        item["value"] = value
-        item["processed_date"] = item.pop("Processed date")
-        item["description"] = item.pop("Description")
+        # Convert ID integers fields to str
+        item["transaction_id"] = str(item["transaction_id"])
+        item["contract_id"] = str(item["contract_id"])
+        item["client_account_id"] = str(item["client_account_id"])
+        item["instrument_id"] = str(item["model_portfolio_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["type"] = item.pop("units_type")
+        item["currency"] = item.pop("market_value_currency")
+        item["price"] = float(item.pop("price_value"))
+        item["units"] = float(item.pop("units_value"))
+        item["value"] = float(item.pop("market_value_value"))
+        # Convert date strings to date object
+        item["date"] = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
+        item["processed_date"] = datetime.datetime.strptime(item["processed_date"], "%Y-%m-%d").date()
 
         return item
 
@@ -712,8 +614,8 @@ class APIClient(object):
     """
 
     # Comment out the unused operational mode.
-    ENVIRONMENT = "production"
     ENVIRONMENT = "test"
+    ENVIRONMENT = "production"
 
     # Domains to choose from
     DOMAIN_PROD = "secure.aospartner.com"
@@ -799,6 +701,8 @@ class APIClient(object):
             sock_read=self.READ_TIMEOUT,
             ceil_threshold=self.TOTAL_TIMEOUT,
         )
+
+        # Make a client session and await the tasks with responses inside them
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             # TODO: Improve output with attributes
             logger.debug(f"Client session with connector={connector}, timeout={timeout}, session={session}.")
@@ -806,6 +710,7 @@ class APIClient(object):
             tasks_todo_list = [task.get(session, retry) for task in incomplete_tasks_list]
             # Fetch data
             responses_list = await asyncio.gather(*tasks_todo_list, return_exceptions=True)
+
         return responses_list
 
     def fetch(self, return_tasks: bool=False):
@@ -850,7 +755,7 @@ class APIClient(object):
                         ex = task.response
                         logger.error(f"Failed {task_name} caused by the exception below:\n%s", "".join(traceback.format_exception(None, ex, ex.__traceback__)))
                     # Give up on the last retry
-                    raise FinworksAPIError("There are incomplete tasks after too many retires - aborting.")
+                    raise APIError("There are incomplete tasks after too many retires - aborting.")
                 else:
                     # Log an explicit retry warning
                     logger.warning(f"Retrying {len(incomplete_tasks_list)} tasks.")
