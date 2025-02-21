@@ -10,13 +10,18 @@ class JSONValidator:
     1. Check JSON data for structure and type using the STRUCTURE_AND_TYPES dict
        noting when there is a nested list of dicts. Do this for all nested
        levels.
-    2. Use the KEYS_TO_RENAME dict to rename all fields regardless of nesting.
-    3. Drop keys as per the KEYS_TO_DROP list
-    4. Use IDENTITY_KEYS to construct the item identity for logging.
-    5. Log all exceptions per item as log rows identifying the item and the
+    2. Use the KEYS_TO_RENAME_AND_KEEP dict to rename all fields regardless of nesting and keep only those fields, dropping others.
+    3. Use IDENTITY_KEYS to construct the item identity for logging.
+    4. Log all exceptions per item as log rows identifying the item and the
        exception. Do not raise exception. Only log them.
-    6. Output the validated and cleaned data preserving the original JSON
+    5. Output the validated and cleaned data preserving the original JSON
        structure and data
+
+    Note
+    ----
+    The drop_keys method is only working at the top level keys and will not drop
+    nested keys even though the capability is there in the ``drop_keys()``
+    method.
 
     Warning
     -------
@@ -34,11 +39,8 @@ class JSONValidator:
     # Define the required keys for the JSON data set
     STRUCTURE_AND_TYPES = {}
 
-    # Define keys to drop if any
-    KEYS_TO_DROP = []
-
     # Define keys to rename if any
-    KEYS_TO_RENAME = {}
+    KEYS_TO_RENAME_AND_KEEP = {}
 
     def __init__(self):
         pass
@@ -86,6 +88,11 @@ class JSONValidator:
         set and clean it inplace by recursive methods to reach all nested
         dictionaries.
 
+        The order of work is as follows:
+        1. Construct the item identity using the IDENTITY_KEYS
+        2. Validate according to the STRUCTURE_AND_TYPES dict
+        3. Rename keys, dropping those not in the KEYS_TO_RENAME_AND_KEEP dict
+
         Parameters
         ----------
         data : list
@@ -127,14 +134,24 @@ class JSONValidator:
         cleaned_data = []
         exceptions = []
         for item in data:
+            # Validate
             identity = construct_identity(item)
             item_exceptions = self.validate_item(item, self.STRUCTURE_AND_TYPES)
             if item_exceptions:
                 # Construct a list of dict for each item exception with the item identity
                 item_exceptions = [{**identity, **exception} for exception in item_exceptions]
                 exceptions.extend(item_exceptions)
-            rename_keys(item, self.KEYS_TO_RENAME)
-            drop_keys(item, self.KEYS_TO_DROP)
+
+            # Drop keys that are in the STRUCTURE_AND_TYPES dict but not in the
+            # KEYS_TO_RENAME_AND_KEEP dict
+            # NOTE: This is only working at the top level keys and will not drop
+            # nested keys even though the capability is there in `drop_keys`.
+            keys_to_drop = set(self.STRUCTURE_AND_TYPES.keys()) - set(self.KEYS_TO_RENAME_AND_KEEP.keys())
+            drop_keys(item, keys_to_drop)
+
+            # Rename keys
+            rename_keys(item, self.KEYS_TO_RENAME_AND_KEEP)
+
             cleaned_data.append(item)
 
         return cleaned_data, exceptions
@@ -209,14 +226,13 @@ class ModelsValidator(JSONValidator):
         "Model portfolio id": int,
         "Name": str,
     }
-    KEYS_TO_DROP = []  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Splits": "splits",
-        "Instrument id": "instrument_id",
-        "Split": "split",
+    KEYS_TO_RENAME_AND_KEEP = {
         "Code": "model_ticker",
-        "Model portfolio id": "model_portfolio_id",
         "Name": "name",
+        "Model portfolio id": "model_portfolio_id",
+        "Instrument id": "instrument_id",
+        "Splits": "splits",
+        "Split": "split",
     }
 
     def flatten_data(self, data):
@@ -251,17 +267,17 @@ class InstrumentsValidator(JSONValidator):
         "Instrument type": str,
         "Name": str,
         "Status": str
+        # There is currently unspecified "Instrument provider unique id" - just leave it out here and let a a `formatter()` deal with it.
     }
-    KEYS_TO_DROP = ["Instrument provider unique id"]  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Code": "code",
-        "Currency": "currency",
-        "ISIN Number": "isin_number",
+
+    # See InstrumentsFrame docstring for the content
+    KEYS_TO_RENAME_AND_KEEP = {
+        "ISIN Number": "isin",
         "Instrument id": "instrument_id",
-        "Instrument provider": "instrument_provider",
+        "Code": "ticker",
         "Instrument type": "instrument_type",
-        "Name": "name",
-        "Status": "status"
+        "Status": "status",
+        "Currency": "currency",
     }
 
 
@@ -285,19 +301,15 @@ class InvestorsValidator(JSONValidator):
         "Modelportfolio": int,
         "Account number": str,
     }
-    KEYS_TO_DROP = ["Account number"]  # Define keys to drop if any
-    KEYS_TO_RENAME = {
-        "Policy number": "policy_number",
-        "Contract number": "contract_number",
-        "Contract id": "contract_id",
-        "Product": "product",
-        "Take On Date": "take_on_date",
-        "Description": "description",
-        "Identification number": "identification_number",
-        "Status": "status",
-        "Modelportfolio": "model_portfolio",
+    KEYS_TO_RENAME_AND_KEEP = {
         "Client account id": "client_account_id",
-        "Investor name": "investor_name"
+        "Contract id": "contract_id",
+        "Contract number": "contract_number",
+        "Identification number": "id_number",
+        "Modelportfolio": "model_portfolio_id",
+        "Take On Date": "take_on_date",
+        "Status": "status",
+        "Investor name": "name"
     }
 
 
@@ -409,15 +421,13 @@ class PositionsValidator(SpecialTypeValidator):
             }
         },
     }
-    KEYS_TO_DROP = ["Instrument account number", "Price date"]
-    KEYS_TO_RENAME = {
-        "Client account id": "client_account_id",
+    KEYS_TO_RENAME_AND_KEEP = {
         "Date": "date",
         "Contract id": "contract_id",
-        "Market Value in Fund Currency": "fund_currency_value",
-        "Latest available price": "price",
+        "Client account id": "client_account_id",
         "Instrument id": "instrument_id",
-        "Market Value in System Currency": "system_currency_value",
+        "Market Value in Fund Currency": "market_value",
+        "Latest available price": "price",
         "Price date": "price_date",
         "Units": "units",
     }
@@ -465,8 +475,7 @@ class TransactionsValidator(SpecialTypeValidator):
         "Type": str,
         "Sub type": str,
     }
-    KEYS_TO_DROP = []  # Define keys to drop if any
-    KEYS_TO_RENAME = {
+    KEYS_TO_RENAME_AND_KEEP = {
         "Transaction id": "transaction_id",
         "Contract id": "contract_id",
         "Client account id": "client_account_id",
