@@ -211,62 +211,6 @@ class Task():
 
         return result_list, exception_list
 
-    @staticmethod
-    def dump_exception_list(service_name, exception_list):
-        """Dump the exception list, if it contains items, to a file on disk."""
-        if len(exception_list) > 0:
-            # Get the date_stamp
-            now = datetime.datetime.now()
-            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
-            # Dump the exceptions to a file
-            path = get_data_path("finworks/exceptions")
-            # If path does not exist then create it
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            filename = f"{service_name}_{date_stamp}_exceptions.pkl"
-            filepath = os.path.join(path, filename)
-            with open(filepath, "wb") as f:
-                pickle.dump(exception_list, f)
-            logger.error(
-                "There were API format exceptions. API data was dropped! See %s", filepath)
-
-    # FIXME: Remove or fix this method. It refers to attributes that do not exist
-    async def get_test_data(self, path:str, date: datetime.date=None) -> list[dict]:
-        """Return test fixture data for the specified API path.
-
-        Note
-        ----
-        This returns test fixture data, not actual API sourced data.
-
-        Parameters
-        ----------
-        path : str
-            The path of the service within the domain to which the request will
-            be sent.
-        date : datetime.date
-            The date for which the test data is required.
-
-        Returns
-        -------
-        list[dict]
-            List items are each a dict representation of the data content of the
-            JSON API response as kept the corresponding test-fixture file.
-        """
-        # Set the test JSON data path on how the path argument matches the API paths
-        # FIXME: This attribute doe not exist
-        filename = self.TEST_DATA_FILENAME_DICT[path]
-        # Process the data date
-        if date is not None:
-            filename = filename.format(date_string=date.strftime("%Y-%m-%d"))
-        # FIXME: This attribute doe not exist
-        filepath = os.path.join(self.TEST_FIXTURES_PATH, filename)
-        # Read the test JSON from the TEST_JSON_PATH directory and convert to a
-        # dict.
-        with open(filepath) as file:
-            data = json.load(file)
-            logger.debug(f"Read test data from {filepath}.")
-        return data
-
     @property
     def is_completed(self) -> bool:
         """Check if the task is completed.
