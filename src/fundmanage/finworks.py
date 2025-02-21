@@ -90,8 +90,18 @@ class CacheError(BaseException):
     pass
 
 
-class FinworksAPIError(BaseException):
+class APIError(BaseException):
     """Any Finworks API related error."""
+
+    pass
+
+class JSONValidationError(BaseException):
+    """There were one or more JSON validation errors."""
+
+    pass
+
+class FormatterError(BaseException):
+    """There were one or more formatting errors."""
 
     pass
 
