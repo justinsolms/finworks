@@ -112,6 +112,42 @@ class TestAuthentication(unittest.TestCase):
         asyncio.run(main())
 
 
+class TestProductionAuthentication(TestAuthentication):
+    """Test the `Production` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("secure.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("secure.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
+
+
+class TestTestAuthentication(TestAuthentication):
+    """Test the `Test` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("test.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("test.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://test.aospartner.com/api/modelmanager/model-portfolios"
+
+
+class TestTrainingAuthentication(TestAuthentication):
+    """Test the `Training` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("training.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("training.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://training.aospartner.com/api/modelmanager/model-portfolios"
+
+
 class TestMockServer(unittest.TestCase):
 
     @classmethod
