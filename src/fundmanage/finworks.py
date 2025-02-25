@@ -109,7 +109,16 @@ class FormatterError(BaseException):
 
 class Task():
     """A task base class to fetch data from the Finworks API.
-        Request headers to be sent with the request.
+
+    The ``Task`` class is a base class for fetching data from the Finworks API.
+    The class is used to fetch data from the API and then validate and format
+    the data into a DataFrame. The DataFrame is then used to create the
+    appropriate table class object, i.e., the constructor `table_class` argument,
+    which is a subclass of the `BaseFrame` class.
+
+    The ``Task`` objects are added to a task list by the ``APIClient.add_task``
+    method which is passed to an asynchronous runner which will use the
+    ``APIClient.fetch`` method to asynchronously fetch the data from the API.
 
     Parameters
     ----------
@@ -226,7 +235,24 @@ class Task():
         return not isinstance(self.response, BaseException) and isinstance(self.response, self.table_class)
 
     async def get(self, session: aiohttp.ClientSession, retry: int) -> BaseFrame:
-        """Fetch data from the Finworks API."""
+        """Fetch data from the Finworks API.
+
+        Use the API session getter, `get`, to fetch data from the Finworks API
+        for keeping in the ``Task.response`` attribute. The data is then
+        validated and formatted for casting into a DataFrame. The DataFrame is
+        then used to create the appropriate table class object, i.e., the
+        constructor `table_class` argument, which is a subclass of the
+        `BaseFrame` class. This object is kept in the `response` attribute of
+        this ``Task`` object (i.e., this class).
+
+        Parameters
+        ----------
+        session : aiohttp.ClientSession
+            The aiohttp client session object.
+        retry : int
+            The retry number for this request. The retry number is used to log
+            the number of retries in the log messages.
+        """
         # Construct the full URL with the path and parameters
         url_path = self.url_path
         full_url = self.full_url
