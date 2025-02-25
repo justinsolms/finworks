@@ -21,6 +21,8 @@ import threading
 import time
 import logging
 
+import pandas as pd
+
 # Import the mock server
 from src.fundmanage import get_certificates_path, get_data_path
 from tests.finworks_mock_server import create_server
@@ -415,7 +417,7 @@ class TestCache(unittest.TestCase):
     This test suite will delete the cache if it exists. Use with caution.
     """
 
-    # Compare tis to CACHE_PATH in finworks.py
+    # Testing alternative to CACHE_PATH in finworks.py
     ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
 
     @classmethod
@@ -429,8 +431,9 @@ class TestCache(unittest.TestCase):
             self.cache = Cache(alt_path=self.ALT_CACHE_PATH, test_url=TEST_URL)
         else:
             self.cache = Cache()
-        # Delete the cache
-        self.cache._delete()  # NOTE: Use with caution - back up the cache first
+        # Delete the cache so its fresh for testing
+        # NOTE: Use with caution - back up the cache first
+        self.cache._delete()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -483,6 +486,73 @@ class TestCache(unittest.TestCase):
         data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
+
+
+class TestCompareAPICache(unittest.TestCase):
+    """Compare ``finworks.APIClient`` data against ``finworks.Cache`` data.
+
+    Use existing production cache data to compare against the API data. This is
+    to verify that the data format produced by the API is the same as the data
+    format stored in the cache. This is to avoid messing up the cache with
+    incorrectly formatted API data.
+
+    Warning
+    -------
+    This test MUST PASS with the production cache with API data, either from the
+    production API or the mock server to ensure that the cache is correctly
+    populated with the API data. Else it could be mangled. Even after this test
+    has passed you should keep a backup of the cache before running a production
+    cache update.
+
+    Note
+    ----
+    The Mock server is used but the production cache is used. As we're obtaining
+    API data from the mock server which should where it's data fixtures should
+    be populated with previously obtained production data.
+
+
+    """
+
+    # We're comparing to the production cache
+    CACHE_PATH = get_data_path("finworks/unittest_cache")
+
+    # Specify a different test date to the main test date
+    TEST_DATE = datetime.date(2023, 12, 14)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        TestMockServer.setUpClass()
+
+    def setUp(self) -> None:
+        """Set up test method."""
+        if USE_TEST_SERVER:
+            # Use test data fixtures instead of the actual API data
+            self.client = ClientInterface(test_url=TEST_URL)
+            # But use the production cache
+            self.cache = Cache()
+        else:
+            # Use the production API and cache
+            self.client = ClientInterface()
+            self.cache = Cache()
+        # NOTE: We do not delete the cache here as we're using the production cache
+        # Get the cache ``finworks.Data`` object from the cache for the test date
+        self.cache_data = self.cache.get_cache_data(from_date=TEST_DATE, to_date=TEST_DATE)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        TestMockServer.tearDownClass()
+
+    def test_compare(self):
+        """Compare the API and Cache data."""
+        # Get the API data for the test date
+        api_data = self.client.get_data(date=self.TEST_DATE)
+        # Compare the data
+        Data.assert_equal(self.cache_data, api_data)
+
+
+
 
 @unittest.skip("Skip test as the repair methods are not yet fully implemented.")
 class TestCacheRepair(unittest.TestCase):

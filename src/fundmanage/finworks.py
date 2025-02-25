@@ -216,8 +216,9 @@ class Task():
                 # Append formatted item for use
                 result_list.append(formatted_item)
             except Exception as ex:
-                # Append exception and item for return_debug_info
-                exception_list.append((ex, item))
+                # Append exception, with traceback sting, and the item
+                exception_info = "".join(traceback.format_exception(None, ex, ex.__traceback__))
+                exception_list.append((exception_info, item))
 
         return result_list, exception_list
 
@@ -351,6 +352,7 @@ class Task():
                             filename = f"{date_stamp}_formatter_exceptions_{url_filename}.log"
                             filepath = os.path.join(path, filename)
                             with open(filepath, "wb") as f:
+                                import ipdb; ipdb.set_trace()
                                 f.write("\n".join(format_exceptions))
                             ex = FormatterError(f"Validation errors encountered. Check file '{filepath}'.")
                             logger.error("Failed formatting", exc_info=ex)
@@ -501,9 +503,9 @@ class InvestorsTask(Task):
         item["status"] = item.pop("status_identifier")
         item["active"] = item.pop("status_active")
         # Make `active` boolean
-        if item["active"] in ["true", "True"]:
+        if item["active"] in [True, "true", "True"]:
             item["active"] = True
-        elif item["active"] in ["false", "False"]:
+        elif item["active"] in [False, "false", "False"]:
             item["active"] = False
         else:
             raise ValueError(
@@ -618,7 +620,7 @@ class TransactionsTask(Task):
         item["transaction_id"] = str(item["transaction_id"])
         item["contract_id"] = str(item["contract_id"])
         item["client_account_id"] = str(item["client_account_id"])
-        item["instrument_id"] = str(item["model_portfolio_id"])
+        item["instrument_id"] = str(item["model_portfolio_id"]) # FIXME: Huhh????
         # Nested status fields that were flattened by the InvestorsValidator
         item["type"] = item.pop("units_type")
         item["currency"] = item.pop("amount_currency")
