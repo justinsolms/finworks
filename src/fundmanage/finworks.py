@@ -351,10 +351,13 @@ class Task():
                             url_filename = url_to_filename(full_url)
                             filename = f"{date_stamp}_formatter_exceptions_{url_filename}.log"
                             filepath = os.path.join(path, filename)
-                            with open(filepath, "wb") as f:
-                                import ipdb; ipdb.set_trace()
-                                f.write("\n".join(format_exceptions))
-                            ex = FormatterError(f"Validation errors encountered. Check file '{filepath}'.")
+                            with open(filepath, "w") as f:
+                                # Pretty print the exceptions
+                                for ex, item in format_exceptions:
+                                    pretty_item = json.dumps(item, indent=4)
+                                    log_entry = f"{ex}\n{pretty_item}\n{'-'*80}\n"
+                                    f.write(log_entry)
+                            ex = FormatterError(f"Format errors encountered. Check file '{filepath}'.")
                             logger.error("Failed formatting", exc_info=ex)
                             self.response = ex
                             return
@@ -364,7 +367,8 @@ class Task():
                         try:
                             self.response = self.table_class(data_frame)
                         except Exception as ex:
-                            logger.error("Failed to create `BaseFrame` child object", exc_info=ex)
+                            table_class_name = self.table_class.__name__
+                            logger.error(f"Failed to create {table_class_name} object", exc_info=ex)
                             self.response = ex
                             return
                 else:
@@ -552,17 +556,20 @@ class PositionsTask(Task):
         # Drop unwanted fields
         # TODO: Check the fields that are dropped against kept fields for equality
         item.pop("market_value_type")
-        item.pop("market_value_currency")
         item.pop("price_type")
         item.pop("price_currency")
         item.pop("price_instrument_id")
-        item.pop("units_instrument_id")
+        # Pop units fields dependent on units_type and assert equalities
+        if "units_instrument_id" in item:
+            assert item.pop("units_instrument_id") == item["instrument_id"]
+        if "units_currency" in item:
+            assert item.pop("units_currency") == item["market_value_currency"]
+        item["type"] = item.pop("units_type")
         # Convert ID integers fields to str
         item["contract_id"] = str(item["contract_id"])
         item["client_account_id"] = str(item["client_account_id"])
-        item["instrument_id"] = str(item["model_portfolio_id"])
+        item["instrument_id"] = str(item["instrument_id"])
         # Nested status fields that were flattened by the InvestorsValidator
-        item["type"] = item.pop("units_type")
         item["currency"] = item.pop("market_value_currency")
         item["price"] = float(item.pop("price_value"))
         item["units"] = float(item.pop("units_value"))
@@ -614,15 +621,18 @@ class TransactionsTask(Task):
         item.pop("price_type")
         item.pop("price_currency")
         item.pop("price_instrument_id")
+        # Pop units fields dependent on units_type and assert equalities
+        if "units_instrument_id" in item:
+            assert item.pop("units_instrument_id") == item["instrument_id"]
+        if "units_currency" in item:
+            assert item.pop("units_currency") == item["amount_currency"]
         item.pop("units_type")
-        item.pop("units_currency")
         # Convert ID integers fields to str
         item["transaction_id"] = str(item["transaction_id"])
         item["contract_id"] = str(item["contract_id"])
         item["client_account_id"] = str(item["client_account_id"])
-        item["instrument_id"] = str(item["model_portfolio_id"]) # FIXME: Huhh????
+        item["instrument_id"] = str(item["instrument_id"])
         # Nested status fields that were flattened by the InvestorsValidator
-        item["type"] = item.pop("units_type")
         item["currency"] = item.pop("amount_currency")
         item["price"] = float(item.pop("price_value"))
         item["units"] = float(item.pop("units_value"))
@@ -1372,10 +1382,10 @@ class PositionsFrame(TimeSeriesFrame):
             raise ValueError("Response is empty.")
         if not self.merged:
             if not self.test_columns_equal(self.COLUMNS):
-                raise ValueError("Unexpected columns in response DataFrame.")
+                raise ValueError("Columns mismatch in received PositionsFrame.")
         else:
             if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
-                raise ValueError("Unexpected columns in response DataFrame.")
+                raise ValueError("Columns mismatch in received PositionsFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
         # TODO: Test that one-to-many relationships hold
@@ -1539,10 +1549,10 @@ class TransactionsFrame(TimeSeriesFrame):
             pass  # Okay to be no transactions
         if not self.merged:
             if not self.test_columns_equal(self.COLUMNS):
-                raise ValueError("Unexpected columns in response DataFrame.")
+                raise ValueError("Columns mismatch in received TransactionsFrame.")
         else:
             if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
-                raise ValueError("Unexpected columns in response DataFrame.")
+                raise ValueError("Columns mismatch in received TransactionsFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
         # Test dtypes
@@ -2237,7 +2247,7 @@ class Data(object):
     @staticmethod
     def assert_equal(data: Data, other:Data) -> None:
         """Assert that two Data objects are equal."""
-        assert_frame_equal(data.models, other.models)
+        assert_frame_equal(data.models, other.models)  # BUG: Fails here
         assert_frame_equal(data.instruments, other.instruments)
         assert_frame_equal(data.investors, other.investors)
         assert_frame_equal(data.positions, other.positions)

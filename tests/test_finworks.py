@@ -549,7 +549,7 @@ class TestCompareAPICache(unittest.TestCase):
         # Get the API data for the test date
         api_data = self.client.get_data(date=self.TEST_DATE)
         # Compare the data
-        Data.assert_equal(self.cache_data, api_data)
+        Data.assert_equal(self.cache_data, api_data) # BUG: Fails here
 
 
 
