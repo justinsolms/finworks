@@ -544,8 +544,18 @@ class TestCompareAPICache(unittest.TestCase):
         """Tear down test class."""
         TestMockServer.tearDownClass()
 
-    def test_compare(self):
-        """Compare the API and Cache data."""
+    def test_compare_index(self):
+        """Compare the API and Cache data column indices.
+
+        Note
+        ----
+        In older cache data we may have previously had bug that filtered out
+        some data so the data may not be exactly the same. So this test may not
+        pass until we completely refresh the cache with valid data. This test
+        will pass if the columns are the same but the data may not be. So use this test
+        instead of `test_compare_frame` if the data is not exactly the same.
+
+        """
         # Get the API data and cache data for the test date
         api_data = self.client.get_data(date=self.TEST_DATE)
         cache_data = self.cache.get_cache_data(from_date=TEST_DATE, to_date=TEST_DATE)
@@ -555,6 +565,25 @@ class TestCompareAPICache(unittest.TestCase):
         assert_index_equal(cache_data.investors.columns, api_data.investors.columns, exact=True, check_order=False)
         assert_index_equal(cache_data.positions.columns, api_data.positions.columns, exact=True, check_order=False)
         assert_index_equal(cache_data.transactions.columns, api_data.transactions.columns, exact=True, check_order=False)
+
+    def test_compare_frame(self):
+        """Compare the API and Cache data.
+
+        Note
+        ----
+        In older cache data we may have previously had bug that filtered out
+        some data so the data may not be exactly the same. So this test may not
+        pass until we completely refresh the cache with valid data.
+        """
+        # Get the API data and cache data for the test date
+        api_data = self.client.get_data(date=self.TEST_DATE)
+        cache_data = self.cache.get_cache_data(from_date=TEST_DATE, to_date=TEST_DATE)
+        # Compare the data columns
+        assert_frame_equal(cache_data.models.columns, api_data.models.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.instruments.columns, api_data.instruments.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.investors.columns, api_data.investors.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.positions.columns, api_data.positions.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.transactions.columns, api_data.transactions.columns, check_exact=True, check_like=True)
 
 
 @unittest.skip("Skip test as the repair methods are not yet fully implemented.")
