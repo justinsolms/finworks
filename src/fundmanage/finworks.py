@@ -308,6 +308,7 @@ class Task():
                         # Use a deep copy of the json_records to avoid modifying
                         # the original
                         json_records = deepcopy(self.json_records)
+                        logger.debug(f"Validating content (try={retry}), url={full_url}")
                         results_records, validation_exceptions = json_validator.validate_and_clean(json_records)
                         # If there are exceptions then dump them to file
                         if validation_exceptions:
@@ -333,9 +334,11 @@ class Task():
                         # Flatten the JSON records into a flat, non-nested format that is
                         # suitable for a columnar first normal form DataFrame table.
                         # Warning: the flatten_data method modifies the original data.
+                        logger.debug(f"Flattening content (try={retry}), url={full_url}")
                         flattened_records = json_validator.flatten_data(results_records)
 
                         # Map the formatter to the flattened records
+                        logger.debug(f"Formatting content (try={retry}), url={full_url}")
                         formatted_records, format_exceptions = self.map_formatter(self.formatter, flattened_records)
                         # If there are exceptions then dump them to file
                         if format_exceptions:
@@ -364,13 +367,15 @@ class Task():
 
                         # Return the formatted data the appropriate table class.
                         data_frame = pd.DataFrame(formatted_records)
+                        table_class_name = self.table_class.__name__
                         try:
                             self.response = self.table_class(data_frame)
                         except Exception as ex:
-                            table_class_name = self.table_class.__name__
                             logger.error(f"Failed to create {table_class_name} object", exc_info=ex)
                             self.response = ex
                             return
+                        else:
+                            logger.info(f"Finished {table_class_name} (try={retry}), url={full_url}")
                 else:
                     # We got some other response status code
                     ex = APIError(f"Unexpected response, status={response.status} from {full_url}")

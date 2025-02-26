@@ -214,7 +214,7 @@ class TestAPIClient(unittest.TestCase):
         TestMockServer.tearDownClass()
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
-    def test_model(self):
+    def test_models(self):
         """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
         self.assertIsInstance(self.api_client, APIClient)
         # Add fetch tasks
@@ -228,7 +228,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], ModelsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -246,7 +246,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], InstrumentsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, InstrumentsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -264,7 +264,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], InvestorsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, InvestorsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -282,7 +282,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], PositionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, PositionsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -300,7 +300,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], TransactionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, TransactionsFrame)
 
     def test_api(self):
@@ -329,7 +329,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertIsInstance(tasks_list[2], InvestorsTask)
         self.assertIsInstance(tasks_list[3], PositionsTask)
         self.assertIsInstance(tasks_list[4], TransactionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
         self.assertIsInstance(tasks_list[1].response, InstrumentsFrame)
         self.assertIsInstance(tasks_list[2].response, InvestorsFrame)
