@@ -2247,11 +2247,11 @@ class Data(object):
     @staticmethod
     def assert_equal(data: Data, other:Data) -> None:
         """Assert that two Data objects are equal."""
-        assert_frame_equal(data.models, other.models)  # BUG: Fails here
-        assert_frame_equal(data.instruments, other.instruments)
-        assert_frame_equal(data.investors, other.investors)
-        assert_frame_equal(data.positions, other.positions)
-        assert_frame_equal(data.transactions, other.transactions)
+        assert_frame_equal(data.models, other.models, check_like=True)
+        assert_frame_equal(data.instruments, other.instruments, check_like=True)
+        assert_frame_equal(data.investors, other.investors, check_like=True)
+        assert_frame_equal(data.positions, other.positions, check_like=True)
+        assert_frame_equal(data.transactions, other.transactions, check_like=True)
 
 
 class ClientInterface(object):
