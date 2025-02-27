@@ -12,31 +12,30 @@ distributed without the express permission of Justin Solms.
 """
 
 import datetime
-import ssl
 import unittest
 from aiohttp import web
 import aiohttp
 import asyncio
+import ssl
 import threading
 import time
 import logging
-import ipdb
 
 # Import the mock server
-from fundmanage3 import get_data_path
-from fundmanage3.finworks_mock_server import create_server
+from src.fundmanage import get_certificates_path, get_data_path
+from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from fundmanage3.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
-from fundmanage3.finworks import ModelsTask, InstrumentsTask, InvestorsTask
-from fundmanage3.finworks import PositionsTask, TransactionsTask
-from fundmanage3.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
-from fundmanage3.finworks import PositionsFrame, TransactionsFrame
-from fundmanage3.finworks import FundProvider
-from fundmanage3.finworks import START_DATE
+from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
+from src.fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
+from src.fundmanage.finworks import PositionsTask, TransactionsTask
+from src.fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from src.fundmanage.finworks import PositionsFrame, TransactionsFrame
+from src.fundmanage.finworks import FundProvider
+from src.fundmanage.finworks import START_DATE
 
 from asset_base.manager import Manager
-from fundmanage3.funds import FundsList
+from src.fundmanage.funds import FundsList
 
 
 # Get module-named logger.
@@ -62,8 +61,8 @@ class TestAuthentication(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        cls.cert_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.crt")
-        cls.key_path = get_data_path("finworks/certificates/secure.aospartner.com/cert.key")
+        cls.cert_path = get_certificates_path("secure.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("secure.aospartner.com/cert.key")
         cls.token = "QyT7oTnIvmiq5swQ"
         cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
 
@@ -74,8 +73,10 @@ class TestAuthentication(unittest.TestCase):
     def test_authentication(self):
         """Test the Finworks certificates and keys."""
         async def fetch(url, cert_path, key_path, token):
-            # Create SSL context and load cert and key
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            # Create an SSL context for use in a client connecting to a server
+            # that uses a certificate file and key file with token and retrieves
+            # JSON data.
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
 
             headers = {
@@ -83,37 +84,19 @@ class TestAuthentication(unittest.TestCase):
                 "Content-Type": "application/json"
             }
 
-            try:
-                async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, ssl=ssl_context) as response:
                     try:
-                        async with session.get(url, headers=headers, ssl=ssl_context) as response:
-                            try:
-                                json_records = await response.json()
-                                return json_records
-                            except aiohttp.ContentTypeError as ex:
-                                # We got a response but it was not JSON
-                                text = await response.text()
-                                # Set the exception as the response
-                                raise FinworksAPIError(
-                                    f"{ex.message}, url={ex.request_info.url}\n"
-                                    f"Text received was:\n"
-                                    f"{text}")
-                            except Exception as e:
-                                print(f"Error reading response text: {e}")
-                    except ssl.SSLCertVerificationError as e:
-                        print(f"SSL certificate verification error occurred: {e}")
-                    except aiohttp.ClientConnectorCertificateError as e:
-                        print(f"Client connector certificate error occurred: {e}")
-                    except ssl.SSLError as e:
-                        print(f"SSL error occurred: {e}")
-                    except aiohttp.ClientError as e:
-                        print(f"Client error occurred: {e}")
-                    except Exception as e:
-                        print(f"An unexpected error occurred during the request: {e}")
-            except aiohttp.ClientError as e:
-                print(f"Client session error occurred: {e}")
-            except Exception as e:
-                print(f"An unexpected error occurred during session creation: {e}")
+                        json_records = await response.json()
+                        return json_records
+                    except aiohttp.ContentTypeError as ex:
+                        # We got a response but it was not JSON
+                        text = await response.text()
+                        # Set the exception as the response
+                        raise FinworksAPIError(
+                            f"{ex.message}, url={ex.request_info.url}\n"
+                            f"Text received was:\n"
+                            f"{text}")
 
         async def main():
             content = await fetch(self.url, self.cert_path, self.key_path, self.token)
@@ -129,7 +112,7 @@ class TestAuthentication(unittest.TestCase):
         asyncio.run(main())
 
 
-class TestServer(unittest.TestCase):
+class TestMockServer(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -177,7 +160,7 @@ class TestAPIClient(unittest.TestCase):
     def setUpClass(cls) -> None:
         """Set up test class."""
         # Start server
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -189,10 +172,11 @@ class TestAPIClient(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         # Stop server
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
-    def test_single(self):
-        """Test the API class."""
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_model(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
         self.assertIsInstance(self.api_client, APIClient)
         # Add fetch tasks
         self.api_client.add_task(ModelsTask)
@@ -207,6 +191,78 @@ class TestAPIClient(unittest.TestCase):
         self.assertIsInstance(tasks_list[0], ModelsTask)
         # Check tasks responses are the expected response types
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_instruments(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(InstrumentsTask)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], InstrumentsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, InstrumentsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_investors(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(InvestorsTask)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], InvestorsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, InvestorsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_positions(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(PositionsTask, date=TEST_DATE)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], PositionsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, PositionsFrame)
+
+    @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
+    def test_transactions(self):
+        """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
+        self.assertIsInstance(self.api_client, APIClient)
+        # Add fetch tasks
+        self.api_client.add_task(TransactionsTask, date=TEST_DATE)
+        # Fetch tasks instead of responses
+        tasks_list = self.api_client.fetch(return_tasks=True)
+        # Check results
+        self.assertIsInstance(tasks_list, list)
+        self.assertEqual(len(tasks_list), 1)
+        # Check tasks responses attributes are not exceptions
+        self.assertNotIsInstance(tasks_list[0].response, Exception)
+        # Check tasks are the expected task types
+        self.assertIsInstance(tasks_list[0], TransactionsTask)
+        # Check tasks responses are the expected response types
+        self.assertIsInstance(tasks_list[0].response, TransactionsFrame)
 
     def test_api(self):
         """Test the API class."""
@@ -247,7 +303,7 @@ class TestClientInterface(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -259,7 +315,7 @@ class TestClientInterface(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_get_models(self):
         """Test the ClientInterface.get_models method."""
@@ -329,7 +385,7 @@ class TestCache(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -343,7 +399,7 @@ class TestCache(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_cache_increment(self):
         """Test the Cache class increment option."""
@@ -429,7 +485,7 @@ class TestCacheRepair(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         """Set up test class."""
-        TestServer.setUpClass()
+        TestMockServer.setUpClass()
 
     def setUp(self) -> None:
         """Set up test method."""
@@ -441,7 +497,7 @@ class TestCacheRepair(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         """Tear down test class."""
-        TestServer.tearDownClass()
+        TestMockServer.tearDownClass()
 
     def test_cache_repair(self):
         """Test the Cache class increment option."""
@@ -491,7 +547,8 @@ class Suite(object):
         suite = unittest.TestSuite()
 
         test_classes = [
-            TestServer,
+            TestAuthentication,
+            TestMockServer,
             TestAPIClient,
             TestClientInterface,
             TestCache,
