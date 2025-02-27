@@ -21,12 +21,15 @@ import threading
 import time
 import logging
 
+import pandas as pd
+from pandas.testing import assert_frame_equal, assert_index_equal
+
 # Import the mock server
 from src.fundmanage import get_certificates_path, get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, FinworksAPIError
+from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, APIError
 from src.fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from src.fundmanage.finworks import PositionsTask, TransactionsTask
 from src.fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
@@ -93,7 +96,7 @@ class TestAuthentication(unittest.TestCase):
                         # We got a response but it was not JSON
                         text = await response.text()
                         # Set the exception as the response
-                        raise FinworksAPIError(
+                        raise APIError(
                             f"{ex.message}, url={ex.request_info.url}\n"
                             f"Text received was:\n"
                             f"{text}")
@@ -110,6 +113,42 @@ class TestAuthentication(unittest.TestCase):
 
         # Commented out to prevent execution in this environment
         asyncio.run(main())
+
+
+class TestProductionAuthentication(TestAuthentication):
+    """Test the `Production` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("secure.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("secure.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://secure.aospartner.com/api/modelmanager/model-portfolios"
+
+
+class TestTestAuthentication(TestAuthentication):
+    """Test the `Test` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("test.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("test.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://test.aospartner.com/api/modelmanager/model-portfolios"
+
+
+class TestTrainingAuthentication(TestAuthentication):
+    """Test the `Training` environment for the Finworks certificates and keys."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        cls.cert_path = get_certificates_path("training.aospartner.com/cert.crt")
+        cls.key_path = get_certificates_path("training.aospartner.com/cert.key")
+        cls.token = "QyT7oTnIvmiq5swQ"
+        cls.url = "https://training.aospartner.com/api/modelmanager/model-portfolios"
 
 
 class TestMockServer(unittest.TestCase):
@@ -175,7 +214,7 @@ class TestAPIClient(unittest.TestCase):
         TestMockServer.tearDownClass()
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
-    def test_model(self):
+    def test_models(self):
         """Test the a single ``Task`` and ``BaseFrame`` class. Can be skipped."""
         self.assertIsInstance(self.api_client, APIClient)
         # Add fetch tasks
@@ -189,7 +228,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], ModelsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -207,7 +246,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], InstrumentsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, InstrumentsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -225,7 +264,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], InvestorsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, InvestorsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -243,7 +282,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], PositionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, PositionsFrame)
 
     @unittest.skip("Used only for contingencies. Otherwise `test_api` does the job.")
@@ -261,7 +300,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertNotIsInstance(tasks_list[0].response, Exception)
         # Check tasks are the expected task types
         self.assertIsInstance(tasks_list[0], TransactionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, TransactionsFrame)
 
     def test_api(self):
@@ -290,7 +329,7 @@ class TestAPIClient(unittest.TestCase):
         self.assertIsInstance(tasks_list[2], InvestorsTask)
         self.assertIsInstance(tasks_list[3], PositionsTask)
         self.assertIsInstance(tasks_list[4], TransactionsTask)
-        # Check tasks responses are the expected response types
+        # A successfully created Frame indicates all Frame creation tests were passed
         self.assertIsInstance(tasks_list[0].response, ModelsFrame)
         self.assertIsInstance(tasks_list[1].response, InstrumentsFrame)
         self.assertIsInstance(tasks_list[2].response, InvestorsFrame)
@@ -379,7 +418,7 @@ class TestCache(unittest.TestCase):
     This test suite will delete the cache if it exists. Use with caution.
     """
 
-    # Compare tis to CACHE_PATH in finworks.py
+    # Testing alternative to CACHE_PATH in finworks.py
     ALT_CACHE_PATH = get_data_path("finworks/unittest_cache")
 
     @classmethod
@@ -393,8 +432,9 @@ class TestCache(unittest.TestCase):
             self.cache = Cache(alt_path=self.ALT_CACHE_PATH, test_url=TEST_URL)
         else:
             self.cache = Cache()
-        # Delete the cache
-        self.cache._delete()  # NOTE: Use with caution - back up the cache first
+        # Delete the cache so its fresh for testing
+        # NOTE: Use with caution - back up the cache first
+        self.cache._delete()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -447,6 +487,104 @@ class TestCache(unittest.TestCase):
         data_cache = self.cache.get_cache_data(from_date=START_DATE, to_date=self.cache.last_date())
         data_api = self.cache.get_api_data(from_date=START_DATE, to_date=self.cache.last_date())
         Data.assert_equal(data_cache, data_api)
+
+
+class TestCompareAPICache(unittest.TestCase):
+    """Compare ``finworks.APIClient`` data against ``finworks.Cache`` data.
+
+    Use existing production cache data to compare against the API data. This is
+    to verify that the data format produced by the API is the same as the data
+    format stored in the cache. This is to avoid messing up the cache with
+    incorrectly formatted API data.
+
+    Warning
+    -------
+    This test MUST PASS with the production cache with API data, either from the
+    production API or the mock server to ensure that the cache is correctly
+    populated with the API data. Else it could be mangled. Even after this test
+    has passed you should keep a backup of the cache before running a production
+    cache update.
+
+    Note
+    ----
+    The Mock server is used but the production cache is used. As we're obtaining
+    API data from the mock server which should where it's data fixtures should
+    be populated with previously obtained production data.
+
+
+    """
+
+    # We're comparing to the production cache
+    CACHE_PATH = get_data_path("finworks/unittest_cache")
+
+    # Specify a different test date to the main test date
+    TEST_DATE = datetime.date(2023, 12, 14)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Set up test class."""
+        TestMockServer.setUpClass()
+
+    def setUp(self) -> None:
+        """Set up test method."""
+        if USE_TEST_SERVER:
+            # Use test data fixtures instead of the actual API data
+            self.client = ClientInterface(test_url=TEST_URL)
+            # But use the production cache
+            self.cache = Cache()
+        else:
+            # Use the production API and cache
+            self.client = ClientInterface()
+            self.cache = Cache()
+        # NOTE: We do not delete the cache here as we're using the production cache
+        # Get the cache ``finworks.Data`` object from the cache for the test date
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Tear down test class."""
+        TestMockServer.tearDownClass()
+
+    def test_compare_index(self):
+        """Compare the API and Cache data column indices.
+
+        Note
+        ----
+        In older cache data we may have previously had bug that filtered out
+        some data so the data may not be exactly the same. So this test may not
+        pass until we completely refresh the cache with valid data. This test
+        will pass if the columns are the same but the data may not be. So use this test
+        instead of `test_compare_frame` if the data is not exactly the same.
+
+        """
+        # Get the API data and cache data for the test date
+        api_data = self.client.get_data(date=self.TEST_DATE)
+        cache_data = self.cache.get_cache_data(from_date=TEST_DATE, to_date=TEST_DATE)
+        # Compare the data columns
+        assert_index_equal(cache_data.models.columns, api_data.models.columns, exact=True, check_order=False)
+        assert_index_equal(cache_data.instruments.columns, api_data.instruments.columns, exact=True, check_order=False)
+        assert_index_equal(cache_data.investors.columns, api_data.investors.columns, exact=True, check_order=False)
+        assert_index_equal(cache_data.positions.columns, api_data.positions.columns, exact=True, check_order=False)
+        assert_index_equal(cache_data.transactions.columns, api_data.transactions.columns, exact=True, check_order=False)
+
+    def test_compare_frame(self):
+        """Compare the API and Cache data.
+
+        Note
+        ----
+        In older cache data we may have previously had bug that filtered out
+        some data so the data may not be exactly the same. So this test may not
+        pass until we completely refresh the cache with valid data.
+        """
+        # Get the API data and cache data for the test date
+        api_data = self.client.get_data(date=self.TEST_DATE)
+        cache_data = self.cache.get_cache_data(from_date=TEST_DATE, to_date=TEST_DATE)
+        # Compare the data columns
+        assert_frame_equal(cache_data.models.columns, api_data.models.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.instruments.columns, api_data.instruments.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.investors.columns, api_data.investors.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.positions.columns, api_data.positions.columns, check_exact=True, check_like=True)
+        assert_frame_equal(cache_data.transactions.columns, api_data.transactions.columns, check_exact=True, check_like=True)
+
 
 @unittest.skip("Skip test as the repair methods are not yet fully implemented.")
 class TestCacheRepair(unittest.TestCase):

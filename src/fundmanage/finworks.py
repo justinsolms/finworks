@@ -1,7 +1,7 @@
 """Finworks API data fetch, re-forming (joining) and caching."""
 from __future__ import annotations
 
-from copy import copy
+from copy import copy, deepcopy
 import json
 import os
 import logging
@@ -15,7 +15,6 @@ from typing import Callable
 import aiohttp
 
 import aiohttp.client_exceptions
-import click
 import pandas as pd
 from pandas import DataFrame
 from tqdm import tqdm
@@ -24,7 +23,12 @@ from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
+from fundmanage.finworks_validator import ModelsValidator, InstrumentsValidator
+from fundmanage.finworks_validator import InvestorsValidator
+from fundmanage.finworks_validator import PositionsValidator, TransactionsValidator
+
 from fundmanage import get_certificates_path, get_data_path, get_output_path
+from fundmanage.utils import url_to_filename
 from .funds import FundsList
 from abc import ABC, abstractmethod
 
@@ -87,25 +91,70 @@ class CacheError(BaseException):
     pass
 
 
-class FinworksAPIError(BaseException):
+class APIError(BaseException):
     """Any Finworks API related error."""
+
+    pass
+
+class JSONValidationError(BaseException):
+    """There were one or more JSON validation errors."""
+
+    pass
+
+class FormatterError(BaseException):
+    """There were one or more formatting errors."""
 
     pass
 
 
 class Task():
-    """A task to fetch data from the Finworks API."""
+    """A task base class to fetch data from the Finworks API.
+
+    The ``Task`` class is a base class for fetching data from the Finworks API.
+    The class is used to fetch data from the API and then validate and format
+    the data into a DataFrame. The DataFrame is then used to create the
+    appropriate table class object, i.e., the constructor `table_class` argument,
+    which is a subclass of the `BaseFrame` class.
+
+    The ``Task`` objects are added to a task list by the ``APIClient.add_task``
+    method which is passed to an asynchronous runner which will use the
+    ``APIClient.fetch`` method to asynchronously fetch the data from the API.
+
+    Parameters
+    ----------
+    url : str
+        The base URL of the Finworks API.
+    path : str
+        The path of the service within the domain to which the request will be sent.
+    table_class : object
+        The class object that will be used to store the response data.
+    validator_class : finworks_validator.JSONValidator
+        The class object that will be used to validate and then format the
+        response data.
+    headers : dict
+        The headers to include in the API request. Example:
+        .. code-block:: json
+            {
+                "Authorization": "Bearer <token>",
+                "Content-Type": "application/json"
+            }
+    ssl_context : ssl.SSLContext
+        The SSL context to use for the request.
+    kwargs : dict
+        Keyword arguments are used for the endpoint parameters.
+    """
 
     PATH = ""
 
     def __init__(
-        self, url: str, path: str, table_class: object,
+        self, url: str, path: str, table_class: object, validator_class: object,
         headers: dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
         self.url = url
         self.path = path
         self.url_path = self.url + self.path
         self.table_class = table_class
+        self.validator_class = validator_class
         self.headers = headers
         self.ssl_context = ssl_context
         self.params = dict()
@@ -120,7 +169,7 @@ class Task():
         self.response = Exception("There were not any valid API response yet.")
         # None responses indicating that the data is not yet fetched or was not
         # successfully fetched
-        self.exception_records = None
+        self.format_exceptions_list = None
         self.json_records = None
 
         # Construct the full URL with the path and parameters for logging purposes
@@ -167,63 +216,11 @@ class Task():
                 # Append formatted item for use
                 result_list.append(formatted_item)
             except Exception as ex:
-                # Append exception and item for return_debug_info
-                exception_list.append((ex, item))
+                # Append exception, with traceback sting, and the item
+                exception_info = "".join(traceback.format_exception(None, ex, ex.__traceback__))
+                exception_list.append((exception_info, item))
 
         return result_list, exception_list
-
-    @staticmethod
-    def dump_exception_list(service_name, exception_list):
-        """Dump the exception list, if it contains items, to a file on disk."""
-        if len(exception_list) > 0:
-            # Get the date_stamp
-            now = datetime.datetime.now()
-            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
-            # Dump the exceptions to a file
-            path = get_data_path("finworks/exceptions")
-            # If path does not exist then create it
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            filename = f"{service_name}_{date_stamp}_exceptions.pkl"
-            filepath = os.path.join(path, filename)
-            with open(filepath, "wb") as f:
-                pickle.dump(exception_list, f)
-            logger.error(
-                "There were API format exceptions. API data was dropped! See %s", filepath)
-
-    async def get_test_data(self, path:str, date: datetime.date=None) -> list[dict]:
-        """Return test fixture data for the specified API path.
-
-        Note
-        ----
-        This returns test fixture data, not actual API sourced data.
-
-        Parameters
-        ----------
-        path : str
-            The path of the service within the domain to which the request will
-            be sent.
-        date : datetime.date
-            The date for which the test data is required.
-
-        Returns
-        -------
-        list[dict]
-            List items are each a dict representation of the data content of the
-            JSON API response as kept the corresponding test-fixture file.
-        """
-        # Set the test JSON data path on how the path argument matches the API paths
-        filename = self.TEST_DATA_FILENAME_DICT[path]
-        # Process the data date
-        if date is not None:
-            filename = filename.format(date_string=date.strftime("%Y-%m-%d"))
-        filepath = os.path.join(self.TEST_FIXTURES_PATH, filename)
-        # Read the test JSON from the TEST_JSON_PATH directory and convert to a
-        # dict.
-        with open(filepath) as file:
-            data = json.load(file)
-            logger.debug(f"Read test data from {filepath}.")
-        return data
 
     @property
     def is_completed(self) -> bool:
@@ -236,157 +233,314 @@ class Task():
         An example would be TimeOutError, ContentTypeError, etc.
 
         """
-        return not isinstance(self.response, BaseException)
+        return not isinstance(self.response, BaseException) and isinstance(self.response, self.table_class)
 
     async def get(self, session: aiohttp.ClientSession, retry: int) -> BaseFrame:
-        """Fetch data from the Finworks API."""
+        """Fetch data from the Finworks API.
+
+        Use the API session getter, `get`, to fetch data from the Finworks API
+        for keeping in the ``Task.response`` attribute. The data is then
+        validated and formatted for casting into a DataFrame. The DataFrame is
+        then used to create the appropriate table class object, i.e., the
+        constructor `table_class` argument, which is a subclass of the
+        `BaseFrame` class. This object is kept in the `response` attribute of
+        this ``Task`` object (i.e., this class).
+
+        Parameters
+        ----------
+        session : aiohttp.ClientSession
+            The aiohttp client session object.
+        retry : int
+            The retry number for this request. The retry number is used to log
+            the number of retries in the log messages.
+        """
         # Construct the full URL with the path and parameters
         url_path = self.url_path
         full_url = self.full_url
         try:
-            logger.debug(f"Getting (try={retry}), url={full_url}")
+            logger.debug(f"Session.get (try={retry}), url={full_url}")
             async with session.get(url_path, params=self.params,
                                    headers=self.headers, ssl=self.ssl_context
                                    ) as response:
-                if response.status != 200:
-                    msg = f"Failed response {response.status} from {full_url}"
-                    logger.error(msg)
+                if 400 <= response.status < 500:
+                    # We got a response in the 400 range and we expect a JSON
+                    # error message
+                    text = await response.json()
                     # Set the exception as the response
-                    self.response = FinworksAPIError(msg)
-                else:
+                    ex = APIError(
+                        f"Unexpected response status={response.status} from {full_url}\n"
+                        f"Text received was:\n"
+                        f"{text}")
+                    logger.error("Unexpected response", exc_info=ex)
+                    self.response = ex
+                elif 500 <= response.status < 600:
+                    # We got a response in the 500 range and the response is
+                    # undefined
+                    ex = APIError(f"Undefined response status={response.status} from {full_url}")
+                    logger.error("Undefined response", exc_info=ex)
+                    self.response = ex
+                elif response.status == 200:
                     try:
-                        logger.debug(f"Awaiting (try={retry}), url={full_url}")
+                        logger.debug(f"Awaiting content (try={retry}), url={full_url}")
                         json_records = await response.json()
                     except aiohttp.ContentTypeError as ex:
                         # We got a response but it was not JSON
                         text = await response.text()
                         # Set the exception as the response
-                        self.response = FinworksAPIError(
-                            f"{ex.message}, url={ex.request_info.url}\n"
+                        ex = APIError(
+                            f"ContentTypeError: {ex.message}, url={ex.request_info.url}\n"
                             f"Text received was:\n"
                             f"{text}")
+                        logger.error("ContentTypeError", exc_info=ex)
+                        self.response = ex
                     except Exception as ex:
-                        # Set the exception as the response
+                        # Unexpected exception
+                        logger.error("Unexpected exception awaiting response", exc_info=ex)
                         self.response = ex
                     else:
-                        logger.info(f"Completed (try={retry}), url={full_url}")
-                        json_records = json_records["data"]
-                        self.json_records = json_records
-        except Exception as ex:
-            # Set the exception as the response
-            self.response = ex
-        else:
-            # Format the data items listing any exceptions by calling the subclass'
-            # formatter method.
-            results_records, exception_records = self.map_formatter(self.formatter, json_records)
-            # If there are exceptions then dump them to a datetime stamped file on disk
-            Task.dump_exception_list(self.__class__.__name__, exception_records)
-            self.exception_records = exception_records
+                        # Got expected JSON data
+                        logger.debug(f"Received content (try={retry}), url={full_url}")
+                        # Keep original JSON records for analysis, collection or
+                        # dumping, etc.
+                        self.json_records = json_records["data"]
+                        # Validate the models data
+                        json_validator = self.validator_class()
+                        # Use a deep copy of the json_records to avoid modifying
+                        # the original
+                        json_records = deepcopy(self.json_records)
+                        logger.debug(f"Validating content (try={retry}), url={full_url}")
+                        results_records, validation_exceptions = json_validator.validate_and_clean(json_records)
+                        # If there are exceptions then dump them to file
+                        if validation_exceptions:
+                            # Get the date_stamp
+                            now = datetime.datetime.now()
+                            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
+                            # Dump the exceptions to a file
+                            path = get_data_path("finworks/exceptions")
+                            # If path does not exist then create it
+                            if not os.path.isdir(path):
+                                os.makedirs(path)
+                            # Format the url so it does not mangle the filename
+                            url_filename = url_to_filename(full_url)
+                            filename = f"{date_stamp}_validation_exceptions_{url_filename}.csv"
+                            filepath = os.path.join(path, filename)
+                            exceptions_table = pd.DataFrame(validation_exceptions)
+                            exceptions_table.to_csv(filepath, index=False)
+                            ex = JSONValidationError(f"Validation errors encountered. Check file '{filepath}'.")
+                            logger.error("Failed validation", exc_info=ex)
+                            self.response = ex
+                            return
 
-            # Return the formatted data the appropriate table class.
-            self.response = self.table_class(pd.DataFrame(results_records))
+                        # Flatten the JSON records into a flat, non-nested format that is
+                        # suitable for a columnar first normal form DataFrame table.
+                        # Warning: the flatten_data method modifies the original data.
+                        logger.debug(f"Flattening content (try={retry}), url={full_url}")
+                        flattened_records = json_validator.flatten_data(results_records)
+
+                        # Map the formatter to the flattened records
+                        logger.debug(f"Formatting content (try={retry}), url={full_url}")
+                        formatted_records, format_exceptions = self.map_formatter(self.formatter, flattened_records)
+                        # If there are exceptions then dump them to file
+                        if format_exceptions:
+                            # Get the date_stamp
+                            now = datetime.datetime.now()
+                            date_stamp = now.strftime("%Y-%m-%d-%H-%M-%S")
+                            # Dump the exceptions to a file
+                            path = get_data_path("finworks/exceptions")
+                            # If path does not exist then create it
+                            if not os.path.isdir(path):
+                                os.makedirs(path)
+                            # Format the url so it does not mangle the filename
+                            url_filename = url_to_filename(full_url)
+                            filename = f"{date_stamp}_formatter_exceptions_{url_filename}.log"
+                            filepath = os.path.join(path, filename)
+                            with open(filepath, "w") as f:
+                                # Pretty print the exceptions
+                                for ex, item in format_exceptions:
+                                    pretty_item = json.dumps(item, indent=4)
+                                    log_entry = f"{ex}\n{pretty_item}\n{'-'*80}\n"
+                                    f.write(log_entry)
+                            ex = FormatterError(f"Format errors encountered. Check file '{filepath}'.")
+                            logger.error("Failed formatting", exc_info=ex)
+                            self.response = ex
+                            return
+
+                        # Return the formatted data the appropriate table class.
+                        data_frame = pd.DataFrame(formatted_records)
+                        table_class_name = self.table_class.__name__
+                        try:
+                            self.response = self.table_class(data_frame)
+                        except Exception as ex:
+                            logger.error(f"Failed to create {table_class_name} object", exc_info=ex)
+                            self.response = ex
+                            return
+                        else:
+                            logger.info(f"Finished {table_class_name} (try={retry}), url={full_url}")
+                else:
+                    # We got some other response status code
+                    ex = APIError(f"Unexpected response, status={response.status} from {full_url}")
+                    logger.error("Unexpected response", exc_info=ex)
+                    self.response = ex
+        except Exception as ex:
+            # Session.get exception
+            logger.error("Session.get exception", exc_info=ex)
+            self.response = ex
 
 
 class ModelsTask(Task):
-    """A task to fetch model data from the Finworks API."""
+    """A task to fetch model data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``ModelsValidator`` and
+    ``ModelsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+        Additional keyword arguments to pass to the parent class.
+
+    """
 
     PATH = "/api/modelmanager/model-portfolios"
     TEST_DATA_FILENAME = "models.json"
 
-    def __init__(self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
+    def __init__(
+        self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, ModelsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, ModelsFrame, ModelsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Rename model fields
-        item["model_ticker"] = item.pop("Code")
-        item["model_portfolio_id"] = item.pop("Model portfolio id")
-        item["name"] = item.pop("Name")
-        # Flatten nested splits flat with the other dict items
-        for split in item["Splits"]:
-            instrument_id = split["Instrument id"]
-            value = split["Split"]
-            assert (
-                value["type"] == "Percentage"
-            ), "The split value `type` must be `Percentage`."
-            item[instrument_id] = value["value"]
-        # Pop off flattened splits
-        item.pop("Splits")
+        # Rename validator fields
+        item.pop("split_type")
+        item["value"] = item.pop("split_value")
+        # Convert ID integers fields to str
+        item["model_portfolio_id"] = str(item["model_portfolio_id"])
+        item["instrument_id"] = str(item["instrument_id"])
+
         return item
 
 class InstrumentsTask(Task):
-    """A task to fetch instrument data from the Finworks API."""
+    """A task to fetch instrument data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``InstrumentsValidator`` and
+    ``InstrumentsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+        Additional keyword arguments to pass to the parent class.
+
+    """
+
+
 
     PATH = "/api/modelmanager/instruments"
     TEST_DATA_FILENAME = "instruments.json"
 
     def __init__(self, url: str, headers:dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, InstrumentsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, InstrumentsFrame, InstrumentsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Rename fields
-        item.pop("Instrument provider")
-        item.pop("Name")
-        item["isin"] = item.pop("ISIN Number")
-        item["instrument_id"] = item.pop("Instrument id")
-        item["ticker"] = item.pop("Code")
-        item["instrument_type"] = item.pop("Instrument type")
-        item["status"] = item.pop("Status")
-        item["currency"] = item.pop("Currency")
+        # Not in the spec and not in InstrumentsValidator.STRUCTURE_AND_TYPES
+        item.pop("Instrument provider unique id")
+        # Convert ID integers fields to str
+        item["instrument_id"] = str(item["instrument_id"])
+
         return item
 
 class InvestorsTask(Task):
-    """A task to fetch investor data from the Finworks API."""
+    """A task to fetch investor data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``InvestorsValidator`` and
+    ``InvestorsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+
+    """
 
     PATH = "/api/modelmanager/investors"
     TEST_DATA_FILENAME = "investors.json"
 
     def __init__(self, url: str, headers: dict, ssl_context: ssl.SSLContext, **kwargs) -> None:
         """Initialization."""
-        super().__init__(url, self.PATH, InvestorsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, InvestorsFrame, InvestorsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        item.pop("Policy number")
-        item.pop("Description")
-        item.pop("Product")
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        if "Account number" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Account number")
-        # Rename fields
-        item["client_account_id"] = item.pop("Client account id") # NOTE: This is not in the Finworks specification
-        item["contract_id"] = item.pop("Contract id")  # NOTE: Was old UUID
-        item["contract_number"] = item.pop("Contract number") # TODO: Rename to contract_number or portfolio_number
-        item["id_number"] = item.pop("Identification number")
-        item["model_portfolio_id"] = item.pop("Modelportfolio")
-        item["take_on_date"] = item.pop("Take On Date")
-        # Status
-        popped = item.pop("Status")
-        item["status"] = popped["identifier"]
-        # TODO: Make boolean
-        item["active"] = popped["active"]
-        # Capitalize names
-        name_str = item.pop("Investor name")
-        investor_names = [n.capitalize() for n in name_str.split(" ")]
-        item["name"] = " ".join(investor_names)
+        # Convert ID integers fields to str
+        item["client_account_id"] = str(item["client_account_id"])
+        item["contract_id"] = str(item["contract_id"])
+        item["model_portfolio_id"] = str(item["model_portfolio_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["status"] = item.pop("status_identifier")
+        item["active"] = item.pop("status_active")
+        # Make `active` boolean
+        if item["active"] in [True, "true", "True"]:
+            item["active"] = True
+        elif item["active"] in [False, "false", "False"]:
+            item["active"] = False
+        else:
+            raise ValueError(
+                "Expected string 'true'|'false' for the `active` field.")
+
         return item
 
 
 class PositionsTask(Task):
-    """A task to fetch position data from the Finworks API."""
+    """A task to fetch position data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``PositionsValidator`` and
+    ``PositionsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+
+    """
 
     PATH = "/api/modelmanager/holdings"
     TEST_DATA_FILENAME = "positions_{date_string}.json"
@@ -396,70 +550,58 @@ class PositionsTask(Task):
         # Check the date keyword argument argument is present
         if "date" not in kwargs:
             raise ValueError("The date keyword argument is required.")
-        super().__init__(url, self.PATH, PositionsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, PositionsFrame, PositionsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        item.pop("Market Value in System Currency")
-        item.pop("Instrument account number")
-        # Renames
-        item["date"] = item.pop("Date")
-        item["contract_id"] = item.pop("Contract id") # TODO: Rename to contract_id
-        item["client_account_id"] = item.pop("Client account id")
-        item["instrument_id"] = item.pop("Instrument id")
-        # The market price. Assert it's fund currency as the  currency
-        # going forward. Assert the value going forward.
-        popped = item.pop("Market Value in Fund Currency")
-        assert (
-            popped["type"] == "Money"
-        ), "Positions market value in fund currency `type` must be `Money`."
-        currency = popped["currency"]
-        value = float(popped["value"])
-        # The `Price` field.
-        popped = item.pop("Latest available price")
-        assert popped["type"] == "Price", "Positions price type discrepancy."
-        assert (
-            popped["currency"] == currency
-        ), "Positions price currency discrepancy."
-        assert (
-            popped["Instrument id"] == item["instrument_id"]
-        ), "Positions instrument price instrument id discrepancy."
-        price = float(popped["value"])
-        # Get type and number of units
-        popped = item.pop("Units")
-        type_ = popped["type"]
-        if type_ == "Unit":
-            assert (
-                popped["Instrument id"] == item["instrument_id"]
-            ), "Positions units units instrument id discrepancy."
-            units = float(popped["value"])
-        elif type_ == "Money":
-            assert (
-                popped["currency"] == currency
-            ), "Positions units money currency discrepancy."
-            units = float(popped["value"])
-            price = 1.0
-        else:
-            raise Exception("Unexpected units type.")
-        assert round(value, 2) == round(
-            units * price, 2
-        ), "Positions price-units and value discrepancy"
-        item["type"] = type_
-        item["currency"] = currency
-        item["price_date"] = item.pop("Price date")
-        item["price"] = price
-        item["units"] = units
-        item["value"] = value
+        # Drop unwanted fields
+        # TODO: Check the fields that are dropped against kept fields for equality
+        item.pop("market_value_type")
+        item.pop("price_type")
+        item.pop("price_currency")
+        item.pop("price_instrument_id")
+        # Pop units fields dependent on units_type and assert equalities
+        if "units_instrument_id" in item:
+            assert item.pop("units_instrument_id") == item["instrument_id"]
+        if "units_currency" in item:
+            assert item.pop("units_currency") == item["market_value_currency"]
+        item["type"] = item.pop("units_type")
+        # Convert ID integers fields to str
+        item["contract_id"] = str(item["contract_id"])
+        item["client_account_id"] = str(item["client_account_id"])
+        item["instrument_id"] = str(item["instrument_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["currency"] = item.pop("market_value_currency")
+        item["price"] = float(item.pop("price_value"))
+        item["units"] = float(item.pop("units_value"))
+        item["value"] = float(item.pop("market_value_value"))
+        # Convert date strings to date object
+        item["date"] = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
+        item["price_date"] = datetime.datetime.strptime(item["price_date"], "%Y-%m-%d").date()
+
         return item
 
 class TransactionsTask(Task):
-    """A task to fetch transaction data from the Finworks API."""
+    """A task to fetch transaction data from the Finworks API.
+
+    Instantiates the parent ``Task`` class with the ``TransactionsValidator`` and
+    ``TransactionsFrame`` classes for validating and packaging the response data
+    respectively.
+
+    Parameters
+    ----------
+    url : str
+        The base URL for the API.
+    headers : dict
+        The headers to include in the API request.
+    ssl_context : ssl.SSLContext
+        The SSL context for secure connections.
+    **kwargs : dict
+    """
 
     PATH = "/api/modelmanager/transactions"
     TEST_DATA_FILENAME = "transactions_{date_string}.json"
@@ -469,80 +611,60 @@ class TransactionsTask(Task):
         # Check the date keyword argument argument is present
         if "date" not in kwargs:
             raise ValueError("The date keyword argument is required.")
-        super().__init__(url, self.PATH, TransactionsFrame, headers, ssl_context, **kwargs)
+        super().__init__(
+            url, self.PATH, TransactionsFrame, TransactionsValidator,
+            headers, ssl_context, **kwargs)
 
     @staticmethod
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Pop off unwanted fields.
-        if "Investor account id" in item:
-            # NOTE: Was contract_number. This was to be removed some day
-            item.pop("Investor account id")
-        item.pop("Instrument account number")
-        # Renames
-        item["date"] = item.pop("Date")
-        # Unique by transaction id
-        item["transaction_id"] = item.pop("Transaction id")
-        item["contract_id"] = item.pop("Contract id")
-        item["client_account_id"] = item.pop("Client account id")
-        item["instrument_id"] = item.pop("Instrument id")
-        item["is_cashflow"] = item.pop("Is Cashflow")
-        # Classification
-        item["type"] = item.pop("Type")
-        item["sub_type"] = item.pop("Sub type")
-        transact_id = item["transaction_id"]
-        instrument_id = item["instrument_id"]
-        # Assert the instrument id going forward.
-        # The `Amount` item. Assert it's currency as the transaction currency
-        # going forward.
-        popped = item.pop("Amount")
-        currency = popped["currency"]  # Transaction currency
-        assert (
-            popped["type"] == "Money"
-        ), f"Transaction value type discrepancy, TID={transact_id}."
-        value = float(popped["value"])  # Transaction value
-        # The `Units` item.
-        popped = item.pop("Units")
-        type_ = popped["type"]
-        if popped["type"] == "Money":
-            units = float(popped["value"])
-        elif popped["type"] == "Unit":
-            units = float(popped["value"])
-            assert (
-                popped["Instrument id"] == instrument_id
-            ), f"Transaction units instrument id discrepancy, TID={transact_id}."
-        else:
-            raise Exception("Unexpected units type.")
-        # The `Price` field. If the units type is `Money` then ignore checks
-        # as there are instrument_id discrepancies as pointed out by Otto -
-        # Finworks (email: Transaction price instrument id discrepancy, 27
-        # Aug 2021, 17:18)
-        popped = item.pop("Price")
-        if type_ != "Money" and popped is not None:
-            # assert popped['Instrument id'] == instrument_id, \
-            #     f'Transaction price instrument id discrepancy, TID={transact_id}.'
-            assert (
-                popped["currency"] == currency
-            ), f"Transaction price currency discrepancy, TID={transact_id}."
-            assert (
-                popped["type"] == "Price"
-            ), f"Transaction price type discrepancy, TID={transact_id}."
-            price = float(popped["value"])  # Transaction price
-        else:
-            price = 1.0
-        # Add fields to item
-        item["currency"] = currency
-        item["price"] = price
-        item["units"] = units
-        item["value"] = value
-        item["processed_date"] = item.pop("Processed date")
-        item["description"] = item.pop("Description")
+        # Drop unwanted fields
+        # TODO: Check the fields that are dropped against kept fields for equality
+        item.pop("instrument_account_number")
+        item.pop("amount_type")
+        item.pop("price_type")
+        item.pop("price_currency")
+        item.pop("price_instrument_id")
+        # Pop units fields dependent on units_type and assert equalities
+        if "units_instrument_id" in item:
+            assert item.pop("units_instrument_id") == item["instrument_id"]
+        if "units_currency" in item:
+            assert item.pop("units_currency") == item["amount_currency"]
+        item.pop("units_type")
+        # Convert ID integers fields to str
+        item["transaction_id"] = str(item["transaction_id"])
+        item["contract_id"] = str(item["contract_id"])
+        item["client_account_id"] = str(item["client_account_id"])
+        item["instrument_id"] = str(item["instrument_id"])
+        # Nested status fields that were flattened by the InvestorsValidator
+        item["currency"] = item.pop("amount_currency")
+        item["price"] = float(item.pop("price_value"))
+        item["units"] = float(item.pop("units_value"))
+        item["value"] = float(item.pop("amount_value"))
+        # Convert date strings to date object
+        item["date"] = datetime.datetime.strptime(item["date"], "%Y-%m-%d").date()
+        item["processed_date"] = datetime.datetime.strptime(item["processed_date"], "%Y-%m-%d").date()
 
         return item
 
 class APIClient(object):
     """A class to asynchronously fetch data from the Finworks API.
+
+    The ``fetch`` method will loop through the task list, awaiting the
+    ``tasker`` method for each ``Task`` child class object in the task list
+    complete the task list. Completed tasks are removed from the list. The list
+    is populated with the ``add_task`` method. The task in the list are each
+    populated with the respective responses or exceptions upon their completion.
+    Tasks left over in the list will be retried until all tasks are complete and
+    the tasks list is empty or the retry limit is reached.
+
+    The ``Task`` child classes are responsible for the getting of the data
+    from the API and the formatting of the data into a DataFrame. The
+    ``Task`` child classes are also responsible for the validation of the
+    data using special ``finworks_validator.JSONValidator`` child classes.
+
+
 
     Parameters
     ----------
@@ -564,7 +686,6 @@ class APIClient(object):
     CRT = "cert.crt"
     VERIFY = "cert.pem"
     TOKEN = "QyT7oTnIvmiq5swQ"
-
 
     if ENVIRONMENT == "test":
         DOMAIN = DOMAIN_TEST
@@ -603,6 +724,8 @@ class APIClient(object):
         self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         self.ssl_context.load_cert_chain(certfile=crt, keyfile=key)
 
+        logger.info(f"API client initialized with url={self.url}")
+
     def __repr__(self) -> str:
         """Return the string representation of the object."""
         return f"APIClient(url={self.url}, ssl_context={self.ssl_context})"
@@ -613,10 +736,11 @@ class APIClient(object):
         for task in self.tasks_list:
             print(task)
 
-    def add_task(self, task: object, **kwargs) -> None:
+    def add_task(self, task: Task, **kwargs) -> None:
         """Add a task to the task list."""
         if not issubclass(task, Task):
             ValueError("The task argument must be a subclass of the Task class.")
+        # Instantiate the `Task` object and append it to the task list
         task_obj = task(self.url, self.headers, self.ssl_context, **kwargs)
         self.tasks_list.append(task_obj)
 
@@ -636,6 +760,8 @@ class APIClient(object):
             sock_read=self.READ_TIMEOUT,
             ceil_threshold=self.TOTAL_TIMEOUT,
         )
+
+        # Make a client session and await the tasks with responses inside them
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             # TODO: Improve output with attributes
             logger.debug(f"Client session with connector={connector}, timeout={timeout}, session={session}.")
@@ -643,10 +769,17 @@ class APIClient(object):
             tasks_todo_list = [task.get(session, retry) for task in incomplete_tasks_list]
             # Fetch data
             responses_list = await asyncio.gather(*tasks_todo_list, return_exceptions=True)
+
         return responses_list
 
     def fetch(self, return_tasks: bool=False):
-        """Fetch data from the Finworks API.
+        """Fetch data from the Finworks API with retry logic.
+
+        Will try to complete tasks in the task list. If a task fails then it
+        will be retried according to the retry list. If the task fails on the
+        last retry then the task will be marked as failed and the exception
+        will be stored in the task object. The task list will be reset to empty
+        before the method returns.
 
         Parameters
         ----------
@@ -681,7 +814,7 @@ class APIClient(object):
                         ex = task.response
                         logger.error(f"Failed {task_name} caused by the exception below:\n%s", "".join(traceback.format_exception(None, ex, ex.__traceback__)))
                     # Give up on the last retry
-                    raise FinworksAPIError("There are incomplete tasks after too many retires - aborting.")
+                    raise APIError("There are incomplete tasks after too many retires - aborting.")
                 else:
                     # Log an explicit retry warning
                     logger.warning(f"Retrying {len(incomplete_tasks_list)} tasks.")
@@ -749,6 +882,9 @@ class BaseFrame(ABC):
     def __repr__(self):
         """Return the string representation of the object."""
         return f"{self.__class__.__name__}(data=\n{self.data!r}, merged={self.merged})"
+
+    def test_columns_equal(self, columns):
+        return set(self.data.columns) == set(columns)
 
     @abstractmethod
     def data_mods(self):
@@ -825,8 +961,8 @@ class ModelsFrame(BaseFrame):
             raise ValueError("Unexpected empty data argument.")
         if normalized or self.normalized:
             pass
-        else:
-            data = self.un_pivot(data)
+        # else:
+        #     data = self.un_pivot(data)
         super().__init__(data, merged)
 
     def data_mods(self):
@@ -839,10 +975,10 @@ class ModelsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.tolist() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in data.")
         else:
-            if self.data.columns.tolist() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in data.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
@@ -952,10 +1088,10 @@ class InstrumentsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if 'proxy_isin' in self.data.columns:
-            if self.data.columns.tolist() != self.COLUMNS + ['proxy_isin']:
+            if not self.test_columns_equal(self.COLUMNS + ['proxy_isin']):
                 raise ValueError("Unexpected columns in data.")
         else:
-            if self.data.columns.tolist() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in data.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
@@ -1026,10 +1162,10 @@ class InvestorsFrame(BaseFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
+            if not self.test_columns_equal(self.COLUMNS):
                 raise ValueError("Unexpected columns in response DataFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
                 raise ValueError("Unexpected columns in response DataFrame.")
         if self.data["client_account_id"].isnull().values.any():
             raise ValueError("Missing values in client_account_id.")
@@ -1249,11 +1385,11 @@ class PositionsFrame(TimeSeriesFrame):
         if self.data.empty:
             raise ValueError("Response is empty.")
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
-                raise ValueError("Unexpected columns in response DataFrame.")
+            if not self.test_columns_equal(self.COLUMNS):
+                raise ValueError("Columns mismatch in received PositionsFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
-                raise ValueError("Unexpected columns in response DataFrame.")
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
+                raise ValueError("Columns mismatch in received PositionsFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
         # TODO: Test that one-to-many relationships hold
@@ -1416,11 +1552,11 @@ class TransactionsFrame(TimeSeriesFrame):
         if self.data.empty:
             pass  # Okay to be no transactions
         if not self.merged:
-            if self.data.columns.to_list() != self.COLUMNS:
-                raise ValueError("Unexpected columns in response DataFrame.")
+            if not self.test_columns_equal(self.COLUMNS):
+                raise ValueError("Columns mismatch in received TransactionsFrame.")
         else:
-            if self.data.columns.to_list() != self.COLUMNS + self.COLUMNS_EXTRA:
-                raise ValueError("Unexpected columns in response DataFrame.")
+            if not self.test_columns_equal(self.COLUMNS + self.COLUMNS_EXTRA):
+                raise ValueError("Columns mismatch in received TransactionsFrame.")
         if self.data.duplicated(subset=self.KEY_COLUMNS).any():
             raise ValueError("Non-unique by KEY_COLUMNS attribute.")
         # Test dtypes
@@ -1532,7 +1668,7 @@ class CollectJSONResponses(object):
         the number is ignored. Defaults to 1.
     basics : bool, optional
         If True then collect basic data. If False then do not collect basics
-        data.
+        data. Defaults to True.
     time_series : bool, optional
         If True then collect time series data. If False then collect only the
         basics data. Defaults to True.
@@ -1570,71 +1706,71 @@ class CollectJSONResponses(object):
         models, instruments, investors, positions, transactions = self.collect(
             basics, time_series)
 
-        # Log lengths
+        # Convert to json strings and dump to JSON text files with pretty
+        # formatting.
         if basics:
-            logger.info("Got %s instrument(s).", len(instruments))
-            logger.info("Got %s investor(s).", len(investors))
-            logger.info("Got %s model(s).", len(models))
-        if time_series:
-            logger.info("Got %s position(s).", len(positions))
-            if transactions is not None:
-                logger.info("Got %s transaction(s).", len(transactions))
+            if models is not None:
+                if simple:
+                    models = models[0:number]
+                models_json = json.dumps(models, indent=4)
+                models_path = get_output_path("models.json")
+                with open(models_path, "w") as f:
+                    f.write(models_json)
+                    logger.info(f"Wrote {len(models)} item(s) to {models_path}.")
             else:
-                logger.info("No transactions found.")
+                logger.warning("No models data received.")
 
-        # Decide what to keep
-        if simple:
-            n = number
-            logger.info(f"Keeping only first {n} item(s) in each list.")
-            # Keep only fist n items in each list
-            models = models[0:n]
-            instruments = instruments[0:n]
-            investors = investors[0:n]
-            positions = positions[0:n]
-            if transactions is not None:
-                transactions = transactions[0:n]
+            if instruments is not None:
+                if simple:
+                    instruments = instruments[0:number]
+                instruments_json = json.dumps(instruments, indent=4)
+                instruments_path = get_output_path("instruments.json")
+                with open(instruments_path, "w") as f:
+                    f.write(instruments_json)
+                    logger.info(f"Wrote {len(instruments)} item(s) to {instruments_path}.")
+            else:
+                logger.warning("No instruments data received.")
+
+            if investors is not None:
+                if simple:
+                    investors = investors[0:number]
+                investors_json = json.dumps(investors, indent=4)
+                investors_path = get_output_path("investors.json")
+                with open(investors_path, "w") as f:
+                    f.write(investors_json)
+                    logger.info(f"Wrote {len(investors)} item(s) to {investors_path}.")
+            else:
+                logger.warning("No investors data received.")
 
         # Convert to json strings and dump to JSON text files with pretty
         # formatting.
-        # BUG: The models, etc., are BaseFrame objects, not dicts.
-        if basics:
-            models_json = json.dumps(models, indent=4)
-            instruments_json = json.dumps(instruments, indent=4)
-            investors_json = json.dumps(investors, indent=4)
         if time_series:
-            positions_json = json.dumps(positions, indent=4)
-            if transactions is not None:
-                transactions_json = json.dumps(transactions, indent=4)
+            if positions is not None:
+                if simple:
+                    positions = positions[0:number]
+                positions_json = json.dumps(positions, indent=4)
+                date_string = self.collection_date.strftime("%Y-%m-%d")
+                positions_path = get_output_path(f"holdings-{date_string}.json")
+                with open(positions_path, "w") as f:
+                    f.write(positions_json)
+                    logger.info(f"Wrote {len(positions)} item(s) to {positions_path}.")
             else:
-                transactions_json = None
+                logger.warning("No positions data received.")
 
-        # Write to files
-        if basics:
-            models_path = get_output_path("models.json")
-            instruments_path = get_output_path("instruments.json")
-            investors_path = get_output_path("investors.json")
-            with open(models_path, "w") as f:
-                f.write(models_json)
-                logger.info(f"Wrote {len(models)} item(s) to {models_path}.")
-            with open(instruments_path, "w") as f:
-                f.write(instruments_json)
-                logger.info(f"Wrote {len(instruments)} item(s) to {instruments_path}.")
-            with open(investors_path, "w") as f:
-                f.write(investors_json)
-                logger.info(f"Wrote {len(investors)} item(s) to {investors_path}.")
-        if time_series:
-            date_string = self.collection_date.strftime("%Y-%m-%d")
-            holdings_path = get_output_path(f"holdings-{date_string}.json")
-            transactions_path = get_output_path(f"transactions-{date_string}.json")
-            with open(holdings_path, "w") as f:
-                f.write(positions_json)
-                logger.info(f"Wrote {len(positions)} item(s) to {holdings_path}.")
-            if transactions_json is not None:
+            if transactions is not None:
+                if simple:
+                    transactions = transactions[0:number]
+                transactions_json = json.dumps(transactions, indent=4)
+                transactions_path = get_output_path(f"transactions-{date_string}.json")
                 with open(transactions_path, "w") as f:
                     f.write(transactions_json)
                     logger.info(f"Wrote {len(transactions)} item(s) to {transactions_path}.")
             else:
-                logger.info("No transactions found. No file written.")
+                logger.warning("No transactions data received.")
+
+        # Log warning of data loss
+        if simple:
+            logger.warning(f"Kept only first {number} item(s) in each list.")
 
     def collect(self, basics, time_series):
         """Collect JSON responses as strings."""
@@ -1652,12 +1788,14 @@ class CollectJSONResponses(object):
             api_client.add_task(InstrumentsTask)
             api_client.add_task(InvestorsTask)
             results_list = api_client.fetch(return_tasks=True)
+            # Note we keep only the JSON records, not the processed data
             results_list = [result.json_records for result in results_list]
             models, instruments, investors = results_list
         if time_series is True:
             api_client.add_task(PositionsTask, date=self.collection_date)
             api_client.add_task(TransactionsTask, date=self.collection_date)
             results_list = api_client.fetch(return_tasks=True)
+            # Note we keep only the JSON records, not the processed data
             results_list = [result.json_records for result in results_list]
             positions, transactions = results_list
 
@@ -2113,11 +2251,11 @@ class Data(object):
     @staticmethod
     def assert_equal(data: Data, other:Data) -> None:
         """Assert that two Data objects are equal."""
-        assert_frame_equal(data.models, other.models)
-        assert_frame_equal(data.instruments, other.instruments)
-        assert_frame_equal(data.investors, other.investors)
-        assert_frame_equal(data.positions, other.positions)
-        assert_frame_equal(data.transactions, other.transactions)
+        assert_frame_equal(data.models, other.models, check_like=True)
+        assert_frame_equal(data.instruments, other.instruments, check_like=True)
+        assert_frame_equal(data.investors, other.investors, check_like=True)
+        assert_frame_equal(data.positions, other.positions, check_like=True)
+        assert_frame_equal(data.transactions, other.transactions, check_like=True)
 
 
 class ClientInterface(object):
