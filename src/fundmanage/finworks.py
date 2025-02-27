@@ -299,7 +299,7 @@ class Task():
                         self.response = ex
                     else:
                         # Got expected JSON data
-                        logger.info(f"Received content (try={retry}), url={full_url}")
+                        logger.debug(f"Received content (try={retry}), url={full_url}")
                         # Keep original JSON records for analysis, collection or
                         # dumping, etc.
                         self.json_records = json_records["data"]
@@ -686,7 +686,6 @@ class APIClient(object):
     CRT = "cert.crt"
     VERIFY = "cert.pem"
     TOKEN = "QyT7oTnIvmiq5swQ"
-
 
     if ENVIRONMENT == "test":
         DOMAIN = DOMAIN_TEST
