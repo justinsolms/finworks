@@ -276,7 +276,17 @@ class Task():
                 elif 500 <= response.status < 600:
                     # We got a response in the 500 range and the response is
                     # undefined
-                    ex = APIError(f"Undefined response status={response.status} from {full_url}")
+                    try:
+                        text = await response.json()
+                    except aiohttp.ContentTypeError as ex:
+                        # Got no JSON - Set the exception as the response without JSON
+                        ex = APIError(f"Undefined response status={response.status} from {full_url}")
+                    else:
+                        # Got JSON - Set the exception as the response with JSON
+                        ex = APIError(
+                            f"Undefined response status={response.status} from {full_url}\n"
+                            f"Text received was:\n"
+                            f"{text}")
                     logger.error("Undefined response", exc_info=ex)
                     self.response = ex
                 elif response.status == 200:
