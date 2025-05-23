@@ -1,6 +1,24 @@
-# curl -X POST "https://secure.aospartner.com/login" \
-#      -H "Content-Type: application/json" \
-#      -d '{"username": "jsolms", "password": "Future5323$"}'
+# Description: This low level bash script uses the curl GET method to test the
+# Finworks production API endpoints. The response times are printed to the
+# console and any received JSON data is saved to a file. The script uses the
+# client certificate and key to authenticate the requests. The script is
+# designed to be run from the command line.
+#
+# Usage: run the script from the command line. Ensure that curl is installed and
+# the client certificate and key are in the specified directory. The script
+# will create the output files in the current directory. You may need to modify
+# the script to change the output directory or the certificate and key paths.
+#
+# Example:
+#   cd to the directory where the script is located
+#   > chmod +x finworks-production-get-snippets.sh
+#   > ./finworks-production-get-snippets.sh
+#   or
+#   > bash finworks-production-get-snippets.sh
+#   or
+#   > sh finworks-production-get-snippets.sh
+
+
 
 # Models
 echo "Start time: $(date '+%Y-%m-%d %H:%M:%S')" && \
