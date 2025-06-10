@@ -664,8 +664,8 @@ class APIClient(object):
     The ``fetch`` method will loop through the task list, awaiting the
     ``tasker`` method for each ``Task`` child class object in the task list
     complete the task list. Completed tasks are removed from the list. The list
-    is populated with the ``add_task`` method. The task in the list are each
     populated with the respective responses or exceptions upon their completion.
+    is populated with the ``add_task`` method. The task in the list are each
     Tasks left over in the list will be retried until all tasks are complete and
     the tasks list is empty or the retry limit is reached.
 
