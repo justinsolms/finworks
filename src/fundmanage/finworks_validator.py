@@ -1,3 +1,38 @@
+"""
+This module provides classes to validate JSON data sets and rename fields
+related to financial instruments, model portfolios, investors, holdings, and
+transactions.
+
+To use this module, you need to have the following files in the same directory:
+- model-portfolios.json
+- instruments.json
+- investors.json
+- holdings.json
+- transactions.json
+
+These files may be obtained by running one of the bash scripts in the
+test directory:
+
+- finworks-production-get-snippets.sh
+- finworks-test-get-snippets.sh
+- finworks-training-get-snippets.sh
+
+These scripts will download the JSON files from the Finworks API and save them
+to the current directory. They make use of the `curl` GET command to fetch
+the data from the API endpoints and are the most reliable and direct way to
+get the data in the correct format, test the API endpoints, and ensure
+the data to be validated is up-to-date.
+
+Alternatively the classes in this module can be used to validate
+the JSON data sets obtained from the Finworks API. The classes will
+validate the JSON data sets according to the defined structure and types,
+rename the keys according to the defined mapping, and clean the data by
+dropping keys that are not in the mapping. The cleaned data is returned as a
+list of dictionaries, preserving the original JSON structure and data.
+
+"""
+
+
 from copy import deepcopy
 import json
 import os
@@ -28,6 +63,7 @@ class JSONValidator:
     This class will not detect extra keys in the JSON data set. It will only
     check for the required keys and their types.
 
+
     """
 
     # Name used for data set identification
@@ -47,7 +83,17 @@ class JSONValidator:
 
     def load_json(self, json_file):
         with open(json_file, 'r') as file:
-            return json.load(file)
+            # Detect if the JSON is direct from thePI or if it the value of the
+            # `data` key. Raw data from the API is a dict with a `size` key and
+            # a `data` key. The data key contains the actual list of items.
+            data = json.load(file)
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
+            elif not isinstance(data, list):
+                raise ValueError(f"Invalid JSON format in {json_file}. Expected a list of items.")
+            if not data:
+                raise ValueError(f"Empty JSON data in {json_file}. Expected a non-empty list of items.")
+            return data
 
     def validate_key_value(self, item, path, exceptions, key, value):
         """Validate key-value pairs in the JSON data set.
@@ -264,18 +310,23 @@ class InstrumentsValidator(JSONValidator):
         "ISIN Number": str,
         "Instrument id": int,
         "Instrument provider": str,
+        "Instrument provider unique id": int,
         "Instrument type": str,
+        "Instrument grouping": str,
         "Name": str,
         "Status": str
-        # There is currently unspecified "Instrument provider unique id" - just leave it out here and let a a `formatter()` deal with it.
     }
 
     # See InstrumentsFrame docstring for the content
     KEYS_TO_RENAME_AND_KEEP = {
+        "Name": "name",
         "ISIN Number": "isin",
         "Instrument id": "instrument_id",
         "Code": "ticker",
         "Instrument type": "instrument_type",
+        "Instrument grouping": "instrument_grouping",
+        "Instrument provider": "provider",
+        "Instrument provider unique id": "provider_id",
         "Status": "status",
         "Currency": "currency",
     }
@@ -494,11 +545,11 @@ class TransactionsValidator(SpecialTypeValidator):
 
 if __name__ == "__main__":
     validators = [
-        (ModelsValidator(), "models.json", "validated_models.json"),
+        # (ModelsValidator(), "model-portfolios.json", "validated_models.json"),
         (InstrumentsValidator(), "instruments.json", "validated_instruments.json"),
-        (InvestorsValidator(), "investors.json", "validated_investors.json"),
-        (PositionsValidator(), "holdings-2023-12-14.json", "validated_holdings.json"),
-        (TransactionsValidator(), "transactions-2023-12-14.json", "validated_transactions.json"),
+        # (InvestorsValidator(), "investors.json", "validated_investors.json"),
+        # (PositionsValidator(), "holdings.json", "validated_holdings.json"),
+        # (TransactionsValidator(), "transactions.json", "validated_transactions.json"),
     ]
 
     for validator, input_file, output_file in validators:
@@ -512,4 +563,3 @@ if __name__ == "__main__":
                 json.dump(flattened_data, file, indent=4)
             print(f"Validation and cleaning successful. Cleaned data saved to {output_file}.")
 
-# NOTE: All tests pass for 2023-12-14 data set.
