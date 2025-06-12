@@ -99,11 +99,57 @@ class JSONValidator:
         """Validate key-value pairs in the JSON data set.
 
         Together with the ``validate_item`` method, this method will recursively
-        validate the JSON data set.
+        validate a nested JSON data set. An example of a nested JSON data
+        set is shown below:
+
+        ```
+        {
+            "key1": "value1",
+            "key2": {
+                "subkey1": "subvalue1",
+                "subkey2": ["item1", "item2"]
+            },
+            "key3": [
+                {"subkey3": "subvalue3"},
+                {"subkey4": "subvalue4"}
+            ]
+        }
+        ```
+        In the example above, the method will validate the key-value pairs
+        recursively, checking if the key exists in the item and if the value
+        is of the expected type. If the key is not found, it will log an
+        exception with the key path and the expected type. If the value is a
+        dictionary, it will recursively validate the nested dictionary. If the
+        value is a list, it will recursively validate each item in the list.
+        If the value is not of the expected type, it will log an exception with
+        the key path and the expected type.
+
+        Parameters
+        ----------
+        item : dict
+            The JSON item to validate.
+        path : str
+            The path to the current key in the JSON item, used for logging
+            exceptions.
+        exceptions : list
+            A list to collect exceptions encountered during validation.
+        key : str
+            The key to validate in the JSON item.
+        value : type or dict or list
+            The expected type or structure of the value for the key in the JSON
+            item. If a dict, it represents a nested structure to validate
+            against. If a list, it represents a list of items to validate
+            against.
+
+
         """
         if key in item:
             if isinstance(value, dict):
-                exceptions.extend(self.validate_item(item[key], value, path + key + "."))
+                if item[key] is None:
+                    # FIXME: Allow None values in the data set
+                    exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
+                else:
+                    exceptions.extend(self.validate_item(item[key], value, path + key + "."))
             elif isinstance(value, list) and isinstance(item[key], list):
                 for i, sub_item in enumerate(item[key]):
                     exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
@@ -369,12 +415,24 @@ class SpecialTypeValidator(JSONValidator):
     def validate_key_value(self, item, path, exceptions, key, value):
         """Validate key-value pairs in the JSON data set.
 
-        The method is overridden to handle the special case when the key is
-        "type" in the STRUCTURE_AND_TYPES dict.
+        In this ``SpecialTypeValidator`` class the method is overridden to
+        handle the special case when the key is "type" in the
+        STRUCTURE_AND_TYPES dict.
 
-        IN a nested dict the type key is used to determine the type of the of the
-        value key. For example:
+        The method calls validate_item to recursively validate the nested dict
+        that contains a "type" key. This is a special case where the value of
+        the "type" key is used to determine the type of the value key in a
+        nested dict. This is useful when the JSON data set contains a nested
+        dict with a "type" key that selects one of several possible structures
+        for the value key. This allows for a flexible structure where the type
+        key can be used to determine the structure of the value key in a nested
+        dict. For example, the JSON data set may contain a nested dict with a
+        "type" key that can be either "Money" or "Unit". The value key will then
+        have a different structure depending on the value of the "type" key.
 
+        An example of a nested dict is shown below:
+
+        ```
         {
             "Units": {
                 "type": "Money",
@@ -389,25 +447,41 @@ class SpecialTypeValidator(JSONValidator):
                 }
             }
         }
+        ```
 
-        The type key's value is read from the dict. The value is used
-        to select the corresponding dict from the STRUCTURE_AND_TYPES dict. This
-        dict is used in the usual manner to validate the nested dict. IN the
-        example above the type key's value is "Money" and the corresponding dict
-        is:
+        In the example above the type key's value is "Money" and the
+        corresponding dict is:
 
+        ```
         {
             "currency": str,
             "value": str
         }
+        ```
 
-        The method calls validate_item to recursively validate the nested dict.
+        Else should the type key's value to be "Unit" the corresponding dict
+        would then be:
 
+        ```
+        {
+            "Instrument id": int,
+            "currency": str,
+            "value": str
+        }
+        ```
 
+        This allows for a flexible structure where the type key can be used to
+        determine the type of the value key in a nested dict.
+
+        Note
+        ----
+        If a key's value in the data is null, the method will not raise an
+        exception.
         """
         if key in item:
             if isinstance(value, dict):
                 if item[key] is None:
+                    # FIXME: Allow None values in the data set
                     exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
                 elif "type" in item[key]:
                     type_key = item[key]["type"]
