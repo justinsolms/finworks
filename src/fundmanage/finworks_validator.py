@@ -146,7 +146,7 @@ class JSONValidator:
         if key in item:
             if isinstance(value, dict):
                 if item[key] is None:
-                    # FIXME: Allow None values in the data set
+                    # FIXME: Why is this here?
                     exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
                 else:
                     exceptions.extend(self.validate_item(item[key], value, path + key + "."))
@@ -154,6 +154,7 @@ class JSONValidator:
                 for i, sub_item in enumerate(item[key]):
                     exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
             elif not isinstance(item[key], value):
+                # FIXME: Allow None values in the data set here and in overloaded methods
                 exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {value}, got {type(item[key])}"})
         else:
             exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
@@ -167,6 +168,8 @@ class JSONValidator:
         exceptions = []
         if isinstance(structure, dict):
             for key, value in structure.items():
+                if key == "Instrument provider unique id":
+                    import ipdb; ipdb.set_trace()
                 self.validate_key_value(item, path, exceptions, key, value)
         else:
             if not isinstance(item, structure):
@@ -481,7 +484,7 @@ class SpecialTypeValidator(JSONValidator):
         if key in item:
             if isinstance(value, dict):
                 if item[key] is None:
-                    # FIXME: Allow None values in the data set
+                    # FIXME: Why is this here?
                     exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
                 elif "type" in item[key]:
                     type_key = item[key]["type"]
