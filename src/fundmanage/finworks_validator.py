@@ -45,12 +45,37 @@ class JSONValidator:
     1. Check JSON data for structure and type using the STRUCTURE_AND_TYPES dict
        noting when there is a nested list of dicts. Do this for all nested
        levels.
-    2. Use the KEYS_TO_RENAME_AND_KEEP dict to rename all fields regardless of nesting and keep only those fields, dropping others.
+    2. Use the KEYS_TO_RENAME_AND_KEEP dict to rename all fields regardless of
+       nesting and keep only those fields, dropping others.
     3. Use IDENTITY_KEYS to construct the item identity for logging.
     4. Log all exceptions per item as log rows identifying the item and the
        exception. Do not raise exception. Only log them.
     5. Output the validated and cleaned data preserving the original JSON
        structure and data
+
+    An example of a nested JSON data set is shown below:
+
+    ```
+    {
+        "key1": "value1",
+        "key2": {
+            "subkey1": "subvalue1",
+            "subkey2": ["item1", "item2"]
+        },
+        "key3": [
+            {"subkey3": "subvalue3"},
+            {"subkey4": "subvalue4"}
+        ]
+    }
+    ```
+    In the example above, the method will validate the key-value pairs
+    recursively, checking if the key exists in the item and if the value
+    is of the expected type. If the key is not found, it will log an
+    exception with the key path and the expected type. If the value is a
+    dictionary, it will recursively validate the nested dictionary. If the
+    value is a list, it will recursively validate each item in the list.
+    If the value is not of the expected type, it will log an exception with
+    the key path and the expected type.
 
     Note
     ----
@@ -58,11 +83,13 @@ class JSONValidator:
     nested keys even though the capability is there in the ``drop_keys()``
     method.
 
-    Warning
-    -------
-    This class will not detect extra keys in the JSON data set. It will only
-    check for the required keys and their types.
+    The exceptions reported on are:
 
+    - Missing key: when a required key is not present in the item.
+    - Unexpected key: when an extra key is present in the item that is not
+      defined in the expected structure.
+    - Type mismatch: when a value does not match the expected type (e.g.,
+      expected int, got str).
 
     """
 
@@ -98,32 +125,6 @@ class JSONValidator:
     def validate_key_value(self, item, path, exceptions, key, expected_type):
         """Validate key-value pairs in the JSON data set.
 
-        Together with the ``validate_item`` method, this method will recursively
-        validate a nested JSON data set. An example of a nested JSON data
-        set is shown below:
-
-        ```
-        {
-            "key1": "value1",
-            "key2": {
-                "subkey1": "subvalue1",
-                "subkey2": ["item1", "item2"]
-            },
-            "key3": [
-                {"subkey3": "subvalue3"},
-                {"subkey4": "subvalue4"}
-            ]
-        }
-        ```
-        In the example above, the method will validate the key-value pairs
-        recursively, checking if the key exists in the item and if the value
-        is of the expected type. If the key is not found, it will log an
-        exception with the key path and the expected type. If the value is a
-        dictionary, it will recursively validate the nested dictionary. If the
-        value is a list, it will recursively validate each item in the list.
-        If the value is not of the expected type, it will log an exception with
-        the key path and the expected type.
-
         Parameters
         ----------
         item : dict
@@ -140,7 +141,6 @@ class JSONValidator:
             item. If a dict, it represents a nested structure to validate
             against. If a list, it represents a list of items to validate
             against.
-
 
         """
         if key in item:
@@ -162,13 +162,29 @@ class JSONValidator:
         """Validate a single item in the JSON data set.
 
         Together with the ``validate_key_value`` method, this method will
-        recursively validate the JSON data set.
+        recursively validate the JSON data set to nested levels.
+
+        Parameters
+        ----------
+        item : dict
+            The JSON item to validate.
+        expected_type : type or dict or list
+            The expected type or structure of the item. If a dict, it represents
+            a nested structure to validate against. If a list, it represents a
+            list of items to validate against.
+        path : str, optional
+            The path to the current item in the JSON data set, used for logging
+            exceptions. Defaults to an empty string.
         """
         exceptions = []
         if isinstance(expected_type, dict):
             # Recurse into every key-value pair in the expected_type dict
             for key, value in expected_type.items():
                 self.validate_key_value(item, path, exceptions, key, value)
+            # Check for extra keys in the item that are not in the expected_type
+            for key in item.keys():
+                if key not in expected_type:
+                    exceptions.append({"Key": f"{path}{key}", "Issue": "Unexpected key"})
         else:
             if not isinstance(item, expected_type):
                 exceptions.append({"Key": f"{path}", "Issue": f"Expected {expected_type}, got {type(item)}"})
@@ -412,6 +428,16 @@ class InvestorsValidator(JSONValidator):
 
 
 class SpecialTypeValidator(JSONValidator):
+    """A special validator that extends the base JSONValidator to handle
+    special cases where the "type" key is used to determine the structure of
+    the value key in a nested dict.
+
+    The extra exceptions reported on are:
+
+    - Invalid type key: in SpecialTypeValidator, when a "type" key's value does
+      not match any allowed types in the structure.
+
+    """
 
     def validate_key_value(self, item, path, exceptions, key, expected_type):
         """Validate key-value pairs in the JSON data set.
@@ -519,6 +545,38 @@ class SpecialTypeValidator(JSONValidator):
                 exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {expected_type}, got {type(item[key])}"})
         else:
             exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
+
+    def validate_item(self, item, expected_type, path=""):
+        """Validate a single item in the JSON data set.
+
+        Together with the ``validate_key_value`` method, this method will
+        recursively validate the JSON data set to nested levels.
+
+        Parameters
+        ----------
+        item : dict
+            The JSON item to validate.
+        expected_type : type or dict or list
+            The expected type or structure of the item. If a dict, it represents
+            a nested structure to validate against. If a list, it represents a
+            list of items to validate against.
+        path : str, optional
+            The path to the current item in the JSON data set, used for logging
+            exceptions. Defaults to an empty string.
+        """
+        exceptions = []
+        if isinstance(expected_type, dict):
+            # Recurse into every key-value pair in the expected_type dict
+            for key, value in expected_type.items():
+                self.validate_key_value(item, path, exceptions, key, value)
+            # Check for extra keys in the item that are not in the expected_type but skip the "type" key
+            for key in item.keys():
+                if key != 'type' and key not in expected_type:
+                    exceptions.append({"Key": f"{path}{key}", "Issue": "Unexpected key"})
+        else:
+            if not isinstance(item, expected_type):
+                exceptions.append({"Key": f"{path}", "Issue": f"Expected {expected_type}, got {type(item)}"})
+        return exceptions
 
 
 class PositionsValidator(SpecialTypeValidator):
