@@ -475,8 +475,6 @@ class InstrumentsTask(Task):
     def formatter(item):
         # Avoid modifying the original as we may need to refer to it later
         item = copy(item)
-        # Not in the spec and not in InstrumentsValidator.STRUCTURE_AND_TYPES
-        item.pop("Instrument provider unique id")
         # Convert ID integers fields to str
         item["instrument_id"] = str(item["instrument_id"])
 

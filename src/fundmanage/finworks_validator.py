@@ -382,14 +382,10 @@ class InstrumentsValidator(JSONValidator):
 
     # See InstrumentsFrame docstring for the content
     KEYS_TO_RENAME_AND_KEEP = {
-        "Name": "name",
         "ISIN Number": "isin",
         "Instrument id": "instrument_id",
         "Code": "ticker",
         "Instrument type": "instrument_type",
-        "Instrument grouping": "instrument_grouping",
-        "Instrument provider": "provider",
-        "Instrument provider unique id": "provider_id",
         "Status": "status",
         "Currency": "currency",
     }
