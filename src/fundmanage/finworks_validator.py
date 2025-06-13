@@ -95,7 +95,7 @@ class JSONValidator:
                 raise ValueError(f"Empty JSON data in {json_file}. Expected a non-empty list of items.")
             return data
 
-    def validate_key_value(self, item, path, exceptions, key, value):
+    def validate_key_value(self, item, path, exceptions, key, expected_type):
         """Validate key-value pairs in the JSON data set.
 
         Together with the ``validate_item`` method, this method will recursively
@@ -135,7 +135,7 @@ class JSONValidator:
             A list to collect exceptions encountered during validation.
         key : str
             The key to validate in the JSON item.
-        value : type or dict or list
+        expected_type : type or dict or list
             The expected type or structure of the value for the key in the JSON
             item. If a dict, it represents a nested structure to validate
             against. If a list, it represents a list of items to validate
@@ -144,36 +144,34 @@ class JSONValidator:
 
         """
         if key in item:
-            if isinstance(value, dict):
-                if item[key] is None:
-                    # FIXME: Why is this here?
-                    exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
-                else:
-                    exceptions.extend(self.validate_item(item[key], value, path + key + "."))
-            elif isinstance(value, list) and isinstance(item[key], list):
+            if isinstance(expected_type, dict):
+                exceptions.extend(self.validate_item(item[key], expected_type, path + key + "."))
+            elif isinstance(expected_type, list) and isinstance(item[key], list):
+                # Validate each item in the list against the expected type.
                 for i, sub_item in enumerate(item[key]):
-                    exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
-            elif not isinstance(item[key], value):
-                # FIXME: Allow None values in the data set here and in overloaded methods
-                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {value}, got {type(item[key])}"})
+                    exceptions.extend(self.validate_item(sub_item, expected_type[0], path + key + f"[{i}]."))
+            elif item[key] is None:
+                # JSON null values are allowed, so we skip validation for None
+                pass
+            elif not isinstance(item[key], expected_type):
+                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {expected_type}, got {type(item[key])}"})
         else:
             exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
 
-    def validate_item(self, item, structure, path=""):
+    def validate_item(self, item, expected_type, path=""):
         """Validate a single item in the JSON data set.
 
         Together with the ``validate_key_value`` method, this method will
         recursively validate the JSON data set.
         """
         exceptions = []
-        if isinstance(structure, dict):
-            for key, value in structure.items():
-                if key == "Instrument provider unique id":
-                    import ipdb; ipdb.set_trace()
+        if isinstance(expected_type, dict):
+            # Recurse into every key-value pair in the expected_type dict
+            for key, value in expected_type.items():
                 self.validate_key_value(item, path, exceptions, key, value)
         else:
-            if not isinstance(item, structure):
-                exceptions.append({"Key": f"{path}", "Issue": f"Expected {structure}, got {type(item)}"})
+            if not isinstance(item, expected_type):
+                exceptions.append({"Key": f"{path}", "Issue": f"Expected {expected_type}, got {type(item)}"})
         return exceptions
 
     def validate_and_clean(self, data):
@@ -415,7 +413,7 @@ class InvestorsValidator(JSONValidator):
 
 class SpecialTypeValidator(JSONValidator):
 
-    def validate_key_value(self, item, path, exceptions, key, value):
+    def validate_key_value(self, item, path, exceptions, key, expected_type):
         """Validate key-value pairs in the JSON data set.
 
         In this ``SpecialTypeValidator`` class the method is overridden to
@@ -480,27 +478,45 @@ class SpecialTypeValidator(JSONValidator):
         ----
         If a key's value in the data is null, the method will not raise an
         exception.
+
+        Parameters
+        ----------
+        item : dict
+            The JSON item to validate.
+        path : str
+            The path to the current key in the JSON item, used for logging
+            exceptions.
+        exceptions : list
+            A list to collect exceptions encountered during validation.
+        key : str
+            The key to validate in the JSON item.
+        expected_type : type or dict or list
+            The expected type or structure of the value for the key in the JSON
+            item. If a dict, it represents a nested structure to validate
+            against. If a list, it represents a list of items to validate
+            against.
         """
         if key in item:
-            if isinstance(value, dict):
-                if item[key] is None:
-                    # FIXME: Why is this here?
-                    exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {type(value)}, got {type(item[key])}"})
-                elif "type" in item[key]:
+            if isinstance(expected_type, dict):
+                if "type" in item[key]:
                     type_key = item[key]["type"]
-                    if type_key not in value:
+                    if type_key not in expected_type:
                         exceptions.append({"Key": f"{path}{key}", "Issue": f"Invalid type key"})
                         return
                     item_key = item[key]
-                    type_structure = value[type_key]
+                    type_structure = expected_type[type_key]
                     exceptions.extend(self.validate_item(item_key, type_structure, path + key + "."))
                 else:
-                    exceptions.extend(self.validate_item(item[key], value, path + key + "."))
-            elif isinstance(value, list) and isinstance(item[key], list):
+                    exceptions.extend(self.validate_item(item[key], expected_type, path + key + "."))
+            elif isinstance(expected_type, list) and isinstance(item[key], list):
+                # Validate each item in the list against the expected type.
                 for i, sub_item in enumerate(item[key]):
-                    exceptions.extend(self.validate_item(sub_item, value[0], path + key + f"[{i}]."))
-            elif not isinstance(item[key], value):
-                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {value}, got {type(item[key])}"})
+                    exceptions.extend(self.validate_item(sub_item, expected_type[0], path + key + f"[{i}]."))
+            elif item[key] is None:
+                # JSON null values are allowed, so we skip validation for None
+                pass
+            elif not isinstance(item[key], expected_type):
+                exceptions.append({"Key": f"{path}{key}", "Issue": f"Expected {expected_type}, got {type(item[key])}"})
         else:
             exceptions.append({"Key": f"{path}{key}", "Issue": "Missing key"})
 
@@ -622,11 +638,11 @@ class TransactionsValidator(SpecialTypeValidator):
 
 if __name__ == "__main__":
     validators = [
-        # (ModelsValidator(), "model-portfolios.json", "validated_models.json"),
+        (ModelsValidator(), "model-portfolios.json", "validated_models.json"),
         (InstrumentsValidator(), "instruments.json", "validated_instruments.json"),
-        # (InvestorsValidator(), "investors.json", "validated_investors.json"),
-        # (PositionsValidator(), "holdings.json", "validated_holdings.json"),
-        # (TransactionsValidator(), "transactions.json", "validated_transactions.json"),
+        (InvestorsValidator(), "investors.json", "validated_investors.json"),
+        (PositionsValidator(), "holdings.json", "validated_holdings.json"),
+        (TransactionsValidator(), "transactions.json", "validated_transactions.json"),
     ]
 
     for validator, input_file, output_file in validators:
