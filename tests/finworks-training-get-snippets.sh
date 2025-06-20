@@ -1,6 +1,5 @@
-# curl -X POST "https://training.aospartner.com/login" \
-#      -H "Content-Type: application/json" \
-#      -d '{"username": "jsolms", "password": "Future5323$"}'
+# See the documentation for the finworks-production-get-snippets.sh script for
+# more details.
 
 # Models
 echo "Start time: $(date '+%Y-%m-%d %H:%M:%S')" && \

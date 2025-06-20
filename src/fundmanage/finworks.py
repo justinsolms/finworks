@@ -664,8 +664,8 @@ class APIClient(object):
     The ``fetch`` method will loop through the task list, awaiting the
     ``tasker`` method for each ``Task`` child class object in the task list
     complete the task list. Completed tasks are removed from the list. The list
-    is populated with the ``add_task`` method. The task in the list are each
     populated with the respective responses or exceptions upon their completion.
+    is populated with the ``add_task`` method. The task in the list are each
     Tasks left over in the list will be retried until all tasks are complete and
     the tasks list is empty or the retry limit is reached.
 
@@ -880,9 +880,20 @@ class BaseFrame(ABC):
         else:
             self.data = data
 
-        # Call the subclass methods
+        # Make necessary modifications to the data before it is passed to the
+        # DataFrame.
         self.data_mods()
-        self.check()
+
+        # Check the integrity of the data
+        try:
+            self.check()
+        except Exception as ex:
+            head = self.data.head(5)
+            logger.error(
+                f"Data integrity check failed for {self.__class__.__name__}.\n"
+                f"Data head:\n{head}\n"
+                f"Exception: {ex}")
+            raise ex
 
         # Sort by child class key columns
         self.data = self.data.sort_values(by=self.KEY_COLUMNS)
@@ -1086,7 +1097,9 @@ class InstrumentsFrame(BaseFrame):
         ticker = self.data.ticker
         self.data["isin"] = isin.mask(isin.isna(), ticker)
         # Add the missing proxy_isin column to the instruments data if it does
-        # not exist
+        # not exist. Proxy instrument ISINs to their respective instrument ISINs
+        # are due to the way Finworks treats some corporate actions. The format
+        # is the (instrument ISIN, proxy ISIN).
         if 'proxy_isin' not in self.data.columns:
             proxy_df = pd.DataFrame(PROXY_ISIN_RECORDS, columns=('isin', 'proxy_isin'))
             self.data = pd.merge(self.data, proxy_df, on='isin', how='left')
@@ -3335,8 +3348,8 @@ class Cache(object):
         else:
             logger.debug(f"Not found reading basics data file {filename}.")
 
-        # Add the missing proxy_isin column to the instruments data using the
-        # InstrumentsFrame constructor
+        # Add back the missing proxy_isin column to the instruments data using the
+        # InstrumentsFrame constructor. See PROXY_ISIN_COLUMN for more.
         instruments = InstrumentsFrame(instruments).data
 
         return models, instruments, investors
