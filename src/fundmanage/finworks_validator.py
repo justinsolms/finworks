@@ -47,7 +47,13 @@ class JSONValidator:
 
     def load_json(self, json_file):
         with open(json_file, 'r') as file:
-            return json.load(file)
+            # Check that there is a "data" and a "size" key then extract only
+            # the `data` key's value, else leave the data alone
+            data = json.load(file)
+            if isinstance(data, dict) and "data" in data and "size" in data:
+                return data["data"]
+            else:
+                raise ValueError(f"Invalid JSON structure in {json_file}. Expected 'data' and 'size' keys.")
 
     def validate_key_value(self, item, path, exceptions, key, value):
         """Validate key-value pairs in the JSON data set.
@@ -494,11 +500,11 @@ class TransactionsValidator(SpecialTypeValidator):
 
 if __name__ == "__main__":
     validators = [
-        (ModelsValidator(), "models.json", "validated_models.json"),
+        (ModelsValidator(), "model-portfolios.json", "validated_models.json"),
         (InstrumentsValidator(), "instruments.json", "validated_instruments.json"),
         (InvestorsValidator(), "investors.json", "validated_investors.json"),
-        (PositionsValidator(), "holdings-2023-12-14.json", "validated_holdings.json"),
-        (TransactionsValidator(), "transactions-2023-12-14.json", "validated_transactions.json"),
+        (PositionsValidator(), "holdings.json", "validated_holdings.json"),
+        (TransactionsValidator(), "transactions.json", "validated_transactions.json"),
     ]
 
     for validator, input_file, output_file in validators:
