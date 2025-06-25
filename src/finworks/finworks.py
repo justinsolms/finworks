@@ -23,12 +23,12 @@ from asset_base.manager import Manager
 from asset_base.exceptions import FactoryError
 from asset_base.accounts import CashAccount, SettlementAccount
 
-from fundmanage.finworks_validator import ModelsValidator, InstrumentsValidator
-from fundmanage.finworks_validator import InvestorsValidator
-from fundmanage.finworks_validator import PositionsValidator, TransactionsValidator
+from finworks.finworks_validator import ModelsValidator, InstrumentsValidator
+from finworks.finworks_validator import InvestorsValidator
+from finworks.finworks_validator import PositionsValidator, TransactionsValidator
 
-from fundmanage import get_certificates_path, get_data_path, get_output_path
-from fundmanage.utils import url_to_filename
+from finworks import get_certificates_path, get_data_path, get_output_path
+from finworks.utils import url_to_filename
 from .funds import FundsList
 from abc import ABC, abstractmethod
 

@@ -1,0 +1,115 @@
+skinparam titleBackgroundColor LightGrey
+
+title Finworks API Data Model [DRAFT]
+
+note as N1
+    The data model should be portfolio centric,
+    with the portfolio as the main entity.
+    instead it is investor centric, with the
+    investor and the portfolio lumped as the
+    main entity.
+end note
+
+class   Models {
+    +<<PK>>model_portfolio_id
+    --
+    -instrument_id
+    --
+    model_ticker
+    name
+    value
+    --
+    isin
+    ticker
+    status
+}
+
+class   Instruments {
+    +<<PK>>instrument_id
+    --
+    -isin
+    --
+    ticker
+    instrument_type
+    status
+    currency
+}
+
+' note right of Investor : Should be split into \n**Portfolio** and **Investor
+
+class   Investor {
+    +<<PK>>client_account_id
+    --
+    -<<FK>>model_portfolio_id
+    --
+    -contract_id
+    --
+    -id_number
+    --
+    contract_number
+    --
+    take_on_date
+    status
+    active
+    name
+    --
+    model_ticker
+}
+
+class   Holdings {
+    +<<PK>>date
+    --
+    +<<PK>><<FK>>client_account_id
+    +<<PK>><<FK>>instrument_id
+    --
+    -contract_id
+    --
+    type
+    currency
+    price_date
+    price
+    units
+    value
+    --
+    model_portfolio_id
+    model_ticker
+    isin
+    ticker
+    status
+}
+
+class   Transactions {
+    +<<PK>>date
+    --
+    +<<PK>><<FK>>client_account_id
+    +<<PK>><<FK>>instrument_id
+    --
+    -<<unique>>transaction_id
+    --
+    -contract_id
+    --
+    is_cashflow
+    type
+    sub_type
+    currency
+    price
+    units
+    value
+    processed_date
+    description
+    --
+    model_portfolio_id
+    model_ticker
+    isin
+    ticker
+    status
+}
+
+Investor "*" -u- "1" Models : > "model_portfolio_id"
+
+Investor "1" -- "*" Holdings : > "client_account_id"
+Investor "1" -- "*" Transactions : > "client_account_id"
+
+Holdings "*" -- "*" Instruments : > "instrument_id"
+Transactions"*" -- "*" Instruments : > "instrument_id"
+

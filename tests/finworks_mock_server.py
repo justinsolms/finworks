@@ -5,7 +5,7 @@ import json
 import os
 import logging
 
-from src.fundmanage import get_tests_path
+from src.finworks import get_tests_path
 
 # Get module-named logger.
 logger = logging.getLogger(__name__)

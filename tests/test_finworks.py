@@ -5,8 +5,8 @@
 """Test suite for the finworks module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
-This file is part of the fundmanage module.
-The fundmanage module can not be modified, copied and/or
+This file is part of the finworks module.
+The finworks module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
@@ -25,20 +25,20 @@ import pandas as pd
 from pandas.testing import assert_frame_equal, assert_index_equal
 
 # Import the mock server
-from src.fundmanage import get_certificates_path, get_data_path
+from src.finworks import get_certificates_path, get_data_path
 from tests.finworks_mock_server import create_server
 
 # Classes to be tested
-from src.fundmanage.finworks import APIClient, Cache, ClientInterface, Data, APIError
-from src.fundmanage.finworks import ModelsTask, InstrumentsTask, InvestorsTask
-from src.fundmanage.finworks import PositionsTask, TransactionsTask
-from src.fundmanage.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
-from src.fundmanage.finworks import PositionsFrame, TransactionsFrame
-from src.fundmanage.finworks import FundProvider
-from src.fundmanage.finworks import START_DATE
+from src.finworks.finworks import APIClient, Cache, ClientInterface, Data, APIError
+from src.finworks.finworks import ModelsTask, InstrumentsTask, InvestorsTask
+from src.finworks.finworks import PositionsTask, TransactionsTask
+from src.finworks.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
+from src.finworks.finworks import PositionsFrame, TransactionsFrame
+from src.finworks.finworks import FundProvider
+from src.finworks.finworks import START_DATE
 
 from asset_base.manager import Manager
-from src.fundmanage.funds import FundsList
+from src.finworks.funds import FundsList
 
 
 # Get module-named logger.

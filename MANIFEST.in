@@ -1,0 +1,7 @@
+include finworks.wsd
+include requirements.yaml
+include README.md
+include clean.sh
+include .gitignore
+recursive-include .vscode *
+recursive-include specs *

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools-scm[toml]>=3.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finworks"
+dynamic = ["version"]
+description = "A data caching client for the Finworks 'model manager' API."
+readme = "README.md"
+requires-python = "==3.12.4"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords = ["financial", "management", "administration", "Finworks"]
+dependencies = [
+    "aiohttp",
+    "click",
+    "pandas",
+    "setuptools",
+    "tqdm",
+    "ipdb",
+]
+
+[[project.authors]]
+name = "Justin Solms"
+email = "justinsolms@gmail.com"
+
+[tool.setuptools.dynamic]
+version = {attr = "finworks._version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+finworks = [
+    "config/*",
+    "certificates/*",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "dirty-tag"
+write_to = "src/finworks/_version.py"
+# tag_regex = '^v?(?P<version>\d+(\.\d+){1,2})$'  # This regex allows tags with and without 'v' prefix
+
+[project.scripts]
+finworks = "finworks.__main__:cli"
+
