@@ -29,7 +29,6 @@ from finworks.finworks_validator import PositionsValidator, TransactionsValidato
 
 from finworks import get_certificates_path, get_data_path, get_output_path
 from finworks.utils import url_to_filename
-from .funds import FundsList
 from abc import ABC, abstractmethod
 
 from pandas.testing import assert_frame_equal
@@ -3503,7 +3502,7 @@ class Cache(object):
         return path
 
 
-class FundProvider:
+class DataFrameProvider:
     """Provide Finworks portfolio records as ``funds.Fund`` objects.
 
     Parameters
@@ -3512,7 +3511,7 @@ class FundProvider:
         The asset base that is used to resolve the ISINs of the fund
         holdings. This contains the database session that must be closed
         when no longer needed.
-    last_date : datetime.date, optional
+    last_date : datetime.date
        The last date to be used to get the latest data. If not set then the
        last date in the cache is used.
     test_cache : bool
@@ -3520,7 +3519,7 @@ class FundProvider:
         raise a ``CacheError``, else ignore the test.
     """
 
-    def __init__(self, asset_base: Manager, last_date: datetime.date = None) -> None:
+    def __init__(self, asset_base: Manager, last_date: datetime.date) -> None:
         """Initialisation."""
         cache = Cache()
         if not cache.is_up_to_date(last_date):
@@ -3538,7 +3537,7 @@ class FundProvider:
         self.data = cache.get_last_data(last_date)
 
         # Test that all ISINs are available in the asset_base
-        err_list = self.test_missing_isins(self.data)
+        err_list = self._test_missing_isins(self.data)
         if len(err_list) != 0:
             raise Exception(f"Missing ISINs in `asset_base`: {err_list}.")
 
@@ -3554,49 +3553,6 @@ class FundProvider:
             f"test_cache={self.test_cache})"
         )
         return txt
-
-    def get_funds_list(self, uuid_list: list = None, model_ticker_list: list = None) -> FundsList:
-        """Get the latest fund list.
-
-        Parameters
-        ----------
-        uuid_list : list, optional
-            A list of uuids to be used to filter the funds. If not set then all
-            the funds are returned.
-        model_ticker_list : list, optional
-            A list of model tickers to be used to filter the funds. If not set
-            then all the funds are returned.
-
-        If any filters are set then the fund positions as well as the models and
-        investors are filtered.
-
-        Returns
-        -------
-        funds.FundList
-            A list of funds based on the latest available data.
-        """
-        models_df = self.get_models_dataframe()
-        investors_df = self.get_investor_dataframe()
-        positions_df = self.get_positions_dataframe()
-        # Filter fund positions by UUID.
-        if uuid_list:
-            positions_df = positions_df[positions_df.client_account_id.isin(uuid_list)]
-        # Filter fund positions by model ticker.
-        if model_ticker_list:
-            positions_df = positions_df[
-                positions_df.model_ticker.isin(model_ticker_list)
-            ]
-
-        # If any fund positions filters apply then filter other dataframes too.
-        if uuid_list or model_ticker_list:
-            models_df = models_df[
-                models_df.ticker.isin(positions_df.model_ticker.unique())
-            ]
-            investors_df = investors_df[
-                investors_df.client_account_id.isin(positions_df.client_account_id.unique())
-            ]
-
-        return FundsList.from_data(self.last_date, positions_df, models_df, investors_df)
 
     def get_models_dataframe(self) -> DataFrame:
         """Get latest models dataframe from the cached data.
@@ -3804,7 +3760,7 @@ class FundProvider:
 
         return positions
 
-    def test_missing_isins(self, data: Data) -> list:
+    def _test_missing_isins(self, data: Data) -> list:
         """Test that all ISINs in the data are present in ``asset_base``."""
         session = self.asset_base.session
         errata_list = list()
@@ -3830,7 +3786,7 @@ class FundProvider:
 
         return list(set(errata_list))
 
-    def test_missing_tickers(self, data: Data) -> list:
+    def _test_missing_tickers(self, data: Data) -> list:
         """Test that all tickers in the data are present in ``asset_base``."""
         session = self.asset_base.session
         errata_list = list()
@@ -3856,7 +3812,3 @@ class FundProvider:
 
         return list(set(errata_list))
 
-
-class TransactionsProvider:
-    """Provide Finworks transactions in a standard for the history module
-    """
