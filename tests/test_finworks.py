@@ -34,11 +34,8 @@ from src.finworks.finworks import ModelsTask, InstrumentsTask, InvestorsTask
 from src.finworks.finworks import PositionsTask, TransactionsTask
 from src.finworks.finworks import ModelsFrame, InstrumentsFrame, InvestorsFrame
 from src.finworks.finworks import PositionsFrame, TransactionsFrame
-from src.finworks.finworks import FundProvider
+from src.finworks.finworks import DataFrameProvider
 from src.finworks.finworks import START_DATE
-
-from asset_base.manager import Manager
-from src.finworks.funds import FundsList
 
 
 # Get module-named logger.
@@ -646,35 +643,6 @@ class TestCacheRepair(unittest.TestCase):
         data_api = self.cache.get_api_data(from_date=start_date, to_date=end_date)
         Data.assert_equal(data_cache, data_api)
 
-
-@unittest.skip("Tests not yet fully implemented.")
-class TestFundProvider(unittest.TestCase):
-    """Test suite for the FundProvider class."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        """Set up test class."""
-        cls.asset_base = Manager()
-
-    def setUp(self) -> None:
-        """Set up test method."""
-        self.today = datetime.date(2024, 4, 30)
-        self.provider = FundProvider(self.asset_base, last_date=self.today)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        """Tear down test class."""
-        cls.asset_base.close()
-
-    def test___init__(self):
-        """Test the FundProvider class."""
-        self.assertIsInstance(self.provider, FundProvider)
-
-    def test_get_funds_list(self):
-        """Test the FundProvider.get_funds_list method."""
-        model_ticker_list = ["IDXDISGROA"]
-        funds_list = self.provider.get_funds_list(model_ticker_list=model_ticker_list)
-        self.assertIsInstance(funds_list, FundsList)
 
 
 class Suite(object):

@@ -11,7 +11,7 @@ import pickle
 import ssl
 import asyncio
 import traceback
-from typing import Callable
+from typing import Callable, Optional
 import aiohttp
 
 import aiohttp.client_exceptions
@@ -3015,7 +3015,7 @@ class Cache(object):
 
         return data
 
-    def get_last_data(self, last_date: datetime.date = None):
+    def get_last_data(self, last_date: Optional[datetime.date] = None):
         """Get cached data over a date range.
 
         Parameters
@@ -3511,30 +3511,32 @@ class DataFrameProvider:
         The asset base that is used to resolve the ISINs of the fund
         holdings. This contains the database session that must be closed
         when no longer needed.
-    last_date : datetime.date
-       The last date to be used to get the latest data. If not set then the
+    date : datetime.date, optional
+       The date to be used to get the latest data. If not set then the
        last date in the cache is used.
     test_cache : bool
         If set to `True` then test if the cache is fresh and if not then
         raise a ``CacheError``, else ignore the test.
     """
 
-    def __init__(self, asset_base: Manager, last_date: datetime.date) -> None:
+    def __init__(self, asset_base: Manager, date: Optional[datetime.date] = None) -> None:
         """Initialisation."""
         cache = Cache()
-        if not cache.is_up_to_date(last_date):
+
+        # Get and keep cache data for the last date. If last date is not
+        # provided then use the cache last-date.
+        if date is None:
+            date = cache.last_date()
+        elif not cache.is_up_to_date(date):
             date = cache.last_date()
             raise CacheError(
                 f"Cache is not up-to-date. It`s Last date is {date}. "
                 "Please update it now."
             )
+
+        self.data = cache.get_last_data(date)
         self.asset_base = asset_base
 
-        # Get and keep cache data for the last date. If last date is not
-        # provided then use the cache last-date.
-        if last_date is None:
-            last_date = cache.last_date()
-        self.data = cache.get_last_data(last_date)
 
         # Test that all ISINs are available in the asset_base
         err_list = self._test_missing_isins(self.data)
@@ -3542,7 +3544,7 @@ class DataFrameProvider:
             raise Exception(f"Missing ISINs in `asset_base`: {err_list}.")
 
         self.cache = cache
-        self.last_date = last_date
+        self.last_date = date
 
     def __repr__(self):
         """Return the official string output."""

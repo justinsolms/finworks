@@ -1,7 +1,7 @@
 # %%
 # Import the necessary libraries
 import pandas as pd
-from fundmanage.finworks import Cache
+from finworks.finworks import Cache
 
 
 # %%
