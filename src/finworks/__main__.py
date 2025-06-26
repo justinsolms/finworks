@@ -28,8 +28,6 @@ import datetime
 import click
 import pandas as pd
 from .finworks import APIClient, Cache, CollectJSONResponses
-from .reporting import AUM, ProductHoldings, ReportingManager
-from .reporting import Plots
 import pkg_resources
 
 # Get module-named logger.
@@ -56,7 +54,7 @@ def cli():
 @click.option("-b", "--batch", type=int, nargs=1, help="Batch update cache in blocks of INTEGER days.", )
 @click.option("-n", "--batches", type=int, nargs=1, default=None, help="Run INTEGER batches, else run batches till completion.", )
 @click.option("-r", "--roll_back", type=int, nargs=1, default=1, help="Roll start date back INTEGER days, overwriting stale data.", )
-def finworks(status, batch, increment, batches, roll_back, to_date):
+def update(status, batch, increment, batches, roll_back, to_date):
     """Update the Finworks cache with data from their API.
 
     With no arguments, the cache is updated with fresh data up till today's date
@@ -104,86 +102,6 @@ def finworks(status, batch, increment, batches, roll_back, to_date):
         cache.update(roll_back=roll_back)
 
 @click.command()
-@click.option("-t", "--today", is_flag=True, default=False, help="Produce reports for today instead of the end of the last month. Overrides --date argument.")
-@click.option("-d", "--date", type=str, nargs=1, help="Produce reports for TEXT date instead of the end of the last month.")
-@click.option("-f", "--fact-sheets", is_flag=True, default=False, help="Report fact sheets.")
-@click.option("-s", "--summary-returns", is_flag=True, default=False, help="Report summary returns table.")
-@click.option("-r", "--full-returns", is_flag=True, default=False, help="Report full history daily returns table.")
-def reports(today, date, fact_sheets, summary_returns, full_returns):
-    """Produce reports for portfolio products.
-
-    If no report arguments are given, all reports are produced, else only the
-    requested reports are produced.
-    """
-    if today:
-        # If today is requested, set date to today.
-        date = datetime.date.today()
-    elif date:
-        # If a date is provided, validate it.
-        date = validate_date(None, None, date)
-    else:
-        # If no date is provided, set date to None, which will default to the
-        # end of the last month.
-        date = None
-
-    # If no report arguments are given, set all to True.
-    if not (fact_sheets or summary_returns or full_returns):
-        fact_sheets = True
-        summary_returns = True
-        full_returns = True
-
-    with ReportingManager(date=date) as reporting_manager:
-        if fact_sheets:
-            reporting_manager.render_fact_sheets()
-        if summary_returns:
-            reporting_manager.render_summary_returns_table()
-        if full_returns:
-            reporting_manager.render_full_returns_table()
-
-@click.command()
-def holdings():
-    """Produce an Excel report of product holdings.
-
-    Fore each product the report contains the following sheets:
-    - Holdings weights.
-    - Holdings values.
-    - Holdings units.
-
-    """
-    weights = ProductHoldings(datetime.date.today())
-    weights.render()
-
-@click.command()
-@click.option("-d", "--days", type=int, default=20, help="Start INTEGER days back finishing at to-date.")
-@click.option("-t", "--to-date", type=str, nargs=1, help="Finish at TEXT date (default will be today).")
-def holdings_chart(days, to_date):
-    """Produce a stacked bar chart of product holdings weights."""
-    plots = Plots()
-    if to_date:
-        # Convert yyyy-mm-dd string to datetime
-        to_date = datetime.datetime.strptime(to_date, "%Y-%m-%d").date()
-    else:
-        # Default to today
-        to_date = datetime.date.today()
-    # Validate the number of days
-    if days < 1:
-        raise ValueError("Days must be a positive integer.")
-    # Plot the weights for the last 'days' days up to 'to_date'
-    plots.plot_weights(days, to_date)
-
-@click.command()
-@click.option("-t", "--to-date", type=str, nargs=1, help="Instead report for AUM till TEXT date.")
-@click.option("-m", "--months", type=int, nargs=1, default=13, help="Number of prior months to include in the report.")
-def aum(to_date, months):
-    """Produce Excel report for AUM for past 13 month-ends."""
-    if to_date:
-        to_date = validate_date(None, None, to_date)
-    else:
-        to_date = datetime.date.today()
-    aum = AUM(date=to_date)
-    aum.render(n=months)
-
-@click.command()
 @click.option("--date", type=str, nargs=1, help="Collect data on TEXT date. Default's to module's TEST_DATE")
 @click.option("--simple", is_flag=True, default=False, help="Keep only the first --number JSON records.")
 @click.option("--number", type=int, nargs=1, help="Keep only INTEGER JSON records when using --simple argument.")
@@ -196,7 +114,6 @@ def collect(date, simple, number, basics, time_series, use_test_data):
     if date is not None:
         date = pd.to_datetime(date).date()
     CollectJSONResponses(date=date, simple=simple, number=number, basics=basics, time_series=time_series, use_test_data=use_test_data)
-
 
 @click.command()
 @click.option("-i", "--instructions", type=str, nargs=1, help="Path to instructions Excel file.")
@@ -260,16 +177,12 @@ def post_trade(instructions, date):
         table.to_excel(writer, sheet_name="Reconciliation", index=True)
         workbook = writer.book
         worksheet = writer.sheets["Reconciliation"]
-        format_percent = workbook.add_format({"num_format": "0.00%", "align": "right"})
-        format_integer = workbook.add_format({"num_format": "#,##0", "align": "right"})
+        format_percent = workbook.add_format({"num_format": "0.00%", "align": "right"}) # type: ignore
+        format_integer = workbook.add_format({"num_format": "#,##0", "align": "right"}) # type: ignore
         worksheet.set_column("B:D", 12, format_percent)
         worksheet.set_column("E:E", 12, format_integer)
 
-cli.add_command(finworks)
-cli.add_command(reports)
-cli.add_command(aum)
-cli.add_command(holdings)
-cli.add_command(holdings_chart)
+cli.add_command(update)
 cli.add_command(collect)
 cli.add_command(post_trade)
 
