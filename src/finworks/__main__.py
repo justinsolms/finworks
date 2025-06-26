@@ -54,7 +54,7 @@ def cli():
 @click.option("-b", "--batch", type=int, nargs=1, help="Batch update cache in blocks of INTEGER days.", )
 @click.option("-n", "--batches", type=int, nargs=1, default=None, help="Run INTEGER batches, else run batches till completion.", )
 @click.option("-r", "--roll_back", type=int, nargs=1, default=1, help="Roll start date back INTEGER days, overwriting stale data.", )
-def update(status, batch, increment, batches, roll_back, to_date):
+def cache(status, batch, increment, batches, roll_back, to_date):
     """Update the Finworks cache with data from their API.
 
     With no arguments, the cache is updated with fresh data up till today's date
@@ -182,7 +182,7 @@ def post_trade(instructions, date):
         worksheet.set_column("B:D", 12, format_percent)
         worksheet.set_column("E:E", 12, format_integer)
 
-cli.add_command(update)
+cli.add_command(cache)
 cli.add_command(collect)
 cli.add_command(post_trade)
 
