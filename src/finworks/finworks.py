@@ -3519,15 +3519,19 @@ class DataFrameProvider:
         raise a ``CacheError``, else ignore the test.
     """
 
-    def __init__(self, asset_base: Manager, date: Optional[datetime.date] = None) -> None:
+    def __init__(self, asset_base: Manager, date: Optional[datetime.date]) -> None:
         """Initialisation."""
         cache = Cache()
 
+        if date is None:
+            # If no date is provided then use the cache last-date
+            date = cache.last_date()
+            if date is None:
+                raise CacheError("Cache is empty. Please update it now.")
+
         # Get and keep cache data for the last date. If last date is not
         # provided then use the cache last-date.
-        if date is None:
-            date = cache.last_date()
-        elif not cache.is_up_to_date(date):
+        if not cache.is_up_to_date(date):
             date = cache.last_date()
             raise CacheError(
                 f"Cache is not up-to-date. It`s Last date is {date}. "
@@ -3544,15 +3548,14 @@ class DataFrameProvider:
             raise Exception(f"Missing ISINs in `asset_base`: {err_list}.")
 
         self.cache = cache
-        self.last_date = date
+        self.date = date
 
     def __repr__(self):
         """Return the official string output."""
         txt = (
             f"{self.__class__.__name__}"
             f"(asset_base={self.asset_base!r}, "
-            f"last_date={self.last_date}, "
-            f"test_cache={self.test_cache})"
+            f"last_date={self.date}, "
         )
         return txt
 

@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 #     action="ignore", message="unclosed", category=ResourceWarning)
 
 # Set up test date
-TEST_DATE = datetime.date(2021, 8, 1)
+TEST_DATE = START_DATE
 # TEST_DATE = MAIN_TEST_DATE
 
 # Use test data fixtures instead of the actual API data
